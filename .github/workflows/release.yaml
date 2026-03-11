@@ -46,7 +46,7 @@ jobs:
         working-directory: WindowSensor
         run: pio run      
         env:
-            PLATFORMIO_BUILD_FLAGS: -DVERSION="${{ steps.version.outputs.version }}"
+            PLATFORMIO_BUILD_FLAGS: -DVERSION=\"${{ steps.version.outputs.version }}\"
 
       - name: Upload firmware File
         uses: actions/upload-artifact@v4
