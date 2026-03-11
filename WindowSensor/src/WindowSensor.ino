@@ -4,7 +4,7 @@
 #include <ESPmDNS.h>
 #include <ArduinoHA.h>
 
-#ifndef
+#ifndef VERSION
 #define VERSION "1.x.x"
 #endif
 //#define DEBUG 1
