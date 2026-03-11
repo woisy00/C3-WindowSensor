@@ -4,7 +4,7 @@
 #include <ESPmDNS.h>
 #include <ArduinoHA.h>
 
-#define VERSION "1.0.1"
+#define VERSION "1.0.4"
 //#define DEBUG 1
 
 #define PIN_NO 1
@@ -12,6 +12,8 @@
 #define PIN_BAT_ADC 4
 #define PIN_BAT_PWR 3
 #define PIN_BUTTON 5
+
+#define BATTERY_SAMPLES 5
 
 #define WIFI_RETRY_LIMIT 40
 #define WIFI_RETRY_DELAY 50
@@ -238,7 +240,6 @@ void connectWiFiFast(bool forceConfig) {
     #endif
     ESP.restart();
   }
-
 }
 
 /* ---------- HARDWARE ---------- */
@@ -254,19 +255,50 @@ bool readWindowState() {
 }
 
 float readBattery() {
-  digitalWrite(PIN_BAT_PWR, HIGH);
-  delay(5);
-  analogReadResolution(12);
-  uint16_t raw = analogRead(PIN_BAT_ADC);
+  // enable divider (connect to ground)
+  pinMode(PIN_BAT_PWR, OUTPUT);
   digitalWrite(PIN_BAT_PWR, LOW);
+
+  delay(20);   // allow voltage to settle
+
+  analogReadResolution(12);
+  analogSetPinAttenuation(PIN_BAT_ADC, ADC_11db);
+
+  // discard first sample
+  analogRead(PIN_BAT_ADC);
+
+  delay(10);
+
+  uint32_t sum = 0;
+  for (int i = 0; i < BATTERY_SAMPLES; i++) {
+    sum += analogRead(PIN_BAT_ADC);
+    delay(2);
+  }
+  
+  uint16_t raw = sum / BATTERY_SAMPLES;
+
+  // disable divider
+  pinMode(PIN_BAT_PWR, INPUT);
+
+  float adc_voltage = (raw / 4095.0) * 2.5;
+
+  float battery_voltage = adc_voltage * 3.128;
+
+  #ifdef DEBUG
+  logMsg("Battery state: " + String(battery_voltage));
+  #endif
+  return battery_voltage;
+
+  // digitalWrite(PIN_BAT_PWR, HIGH);
+  // delay(5);
+  // analogReadResolution(12);
+  // uint16_t raw = analogRead(PIN_BAT_ADC);
+  // digitalWrite(PIN_BAT_PWR, LOW);
 
   
   
-  float voltage = (raw / 4095.0) * 1.1 * 3.128;
-  #ifdef DEBUG
-  logMsg("Battery state: " + String(voltage));
-  #endif
-  return voltage;
+  // float voltage = (raw / 4095.0) * 1.1 * 3.128;
+  // return voltage;
 }
 
 /* ---------- HA SETUP ---------- */
@@ -275,6 +307,8 @@ void setupHA() {
   haDevice.setUniqueId(mac, sizeof(mac));
   haDevice.setName(device_name.c_str());
   haDevice.setSoftwareVersion(VERSION);
+  haDevice.setModel("BWS-01");
+  haDevice.setManufacturer("bergermeier");
 
   // This method enables availability for all device types registered on the device.
   // For example, if you have 5 sensors on the same device, you can enable
@@ -288,11 +322,13 @@ void setupHA() {
   // the Home Assistant Panel.
   //haDevice.enableLastWill();
 
-  windowSensor.setIcon("mdi:window-open-variant");
+  //windowSensor.setIcon("mdi:window-open-variant");
+  windowSensor.setDeviceClass("window");
   windowSensor.setName("Window Sensor");
   
-  batterySensor.setIcon("mdi:battery");
+  //batterySensor.setIcon("mdi:battery");
   batterySensor.setName("Battery");
+  batterySensor.setDeviceClass("voltage");
   batterySensor.setUnitOfMeasurement("V");
 
   mqtt.begin(mqtt_host.c_str(), mqtt_user.c_str(), mqtt_pass.c_str());
@@ -366,10 +402,8 @@ void setup() {
   float battery = readBattery();
 
   
-  windowSensor.setState(windowOpen);
-  windowSensor.setCurrentState(windowOpen);
-  batterySensor.setValue(battery);
-  batterySensor.setCurrentValue(battery);  
+  windowSensor.setState(windowOpen, true);
+  batterySensor.setValue(battery, true);
   #ifdef DEBUG
   logMsg("Sending state to HA: window: " + boolToString(windowOpen) + ", batt: " + String(battery));
   #endif
