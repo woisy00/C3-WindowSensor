@@ -4,7 +4,9 @@
 #include <ESPmDNS.h>
 #include <ArduinoHA.h>
 
-#define VERSION "1.0.4"
+#ifndef
+#define VERSION "1.x.x"
+#endif
 //#define DEBUG 1
 
 #define PIN_NO 1
