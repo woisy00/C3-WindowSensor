@@ -19,28 +19,26 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
-      - name: Create Release
-        id: create_release
-        uses: ncipollo/release-action@v1.20.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          name: Window Sensor Release ${{ github.ref }}
-          draft: true
-          body: |
-            ### Release Highlights
-
-            ### Features & Enhancements
-
-            <!-- Insert The Features and Enhancements below as points possibly add the link to the PR/commit -->
-
-            ### Bug Fixes
-
-            <!-- Insert The Bug Fixes below as points, also add relevant links -->
-
       - name: Determine version
         id: version
         run: echo "version=${GITHUB_REF:10}" >> $GITHUB_OUTPUT
+
+      - name: Find release by tag
+        id: find_release
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = ${{ steps.version.outputs.version }};
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const rel = releases.data.find(r => r.tag_name === tag);
+            if (!rel) {
+              core.setFailed(`no release found for tag ${tag}`);
+            }
+            return { upload_url: rel.upload_url.replace('{?name,label}','') };
 
       - name: Build PlatformIO Project
         working-directory: WindowSensor
@@ -60,7 +58,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          upload_url: ${{ steps.find_release.outputs.upload_url }}
           asset_path: WindowSensor/.pio/build/esp32-c3-devkitm-1/firmware.bin
           asset_name: WindowSensor-${{ steps.version.outputs.version }}.bin
           asset_content_type: application/octet-stream
