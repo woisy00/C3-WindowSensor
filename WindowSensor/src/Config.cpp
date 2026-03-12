@@ -1,0 +1,117 @@
+#include "Config.h"
+#include "Utils.h"
+
+Config::Config()
+    : deviceName(""),
+      mqttHost(""),
+      mqttUser(""),
+      mqttPass(""),
+      sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
+      loopTime(3000UL),
+      rTop(1000.0),
+      rBottom(680.0),
+      _p_group_general(nullptr),
+      _p_group_mqtt(nullptr),
+      _p_adv_begin(nullptr),
+      _p_adv_end(nullptr),
+      _p_dev(nullptr),
+      _p_host(nullptr),
+      _p_user(nullptr),
+      _p_pass(nullptr),
+      _p_sleep_time(nullptr),
+      _p_loop_time(nullptr),
+      _p_rTop(nullptr),
+      _p_rBottom(nullptr),
+      _shouldSave(false) {
+}
+
+bool Config::load() {
+    _prefs.begin("config", true);
+    deviceName = _prefs.getString("dev", "");
+    mqttHost = _prefs.getString("mqtt_host", "");
+    mqttUser = _prefs.getString("mqtt_user", "");
+    mqttPass = _prefs.getString("mqtt_pass", "");
+    sleepTime = _prefs.getULong("sleep_time", sleepTime);
+    loopTime = _prefs.getULong("loop_time", loopTime);
+    rTop = _prefs.getFloat("rTop", rTop);
+    rBottom = _prefs.getFloat("rBottom", rBottom);
+    _prefs.end();
+
+#ifdef DEBUG
+    Utils::logMsg("Loaded config:");
+    Utils::logMsg("  device_name: " + deviceName);
+    Utils::logMsg("  mqtt_host: " + mqttHost);
+    Utils::logMsg("  mqtt_user: " + mqttUser);
+    Utils::logMsg("  mqtt_pass: " + mqttPass);
+    Utils::logMsg("  sleep_time: " + Utils::millisToHuman(sleepTime));
+    Utils::logMsg("  loop_time: " + Utils::millisToHuman(loopTime));
+    Utils::logMsg("  rTop (kΩ): " + String(rTop));
+    Utils::logMsg("  rBottom (kΩ): " + String(rBottom));
+#endif
+
+    return mqttHost.length() > 0;
+}
+
+void Config::save() {
+    // update fields from portal parameters if they exist
+    if (_p_dev.getValue() != nullptr) {
+        deviceName = _p_dev.getValue();
+        mqttHost = _p_host.getValue();
+        mqttUser = _p_user.getValue();
+        mqttPass = _p_pass.getValue();
+        sleepTime = Utils::parseDuration(_p_sleep_time.getValue());
+        loopTime = Utils::parseDuration(_p_loop_time.getValue());
+        rTop = String(_p_rTop.getValue()).toFloat();
+        rBottom = String(_p_rBottom.getValue()).toFloat();
+    }
+
+    _prefs.begin("config", false);
+    _prefs.putString("dev", deviceName);
+    _prefs.putString("mqtt_host", mqttHost);
+    _prefs.putString("mqtt_user", mqttUser);
+    _prefs.putString("mqtt_pass", mqttPass);
+    _prefs.putULong("sleep_time", sleepTime);
+    _prefs.putULong("loop_time", loopTime);
+    _prefs.putFloat("rTop", rTop);
+    _prefs.putFloat("rBottom", rBottom);
+    _prefs.end();
+}
+
+void Config::configureWiFiManager(WiFiManager& wm) {
+    // create group headers using custom HTML parameters
+    new (&_p_group_general) WiFiManagerParameter("<h2>General</h2><hr>");
+    new (&_p_group_mqtt) WiFiManagerParameter("<h2>MQTT</h2><hr>");
+    // advanced section start/end tags
+    new (&_p_adv_begin) WiFiManagerParameter("<details><summary>Advanced</summary>");
+    new (&_p_adv_end) WiFiManagerParameter("</details>");
+
+    new (&_p_dev) WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
+    new (&_p_host) WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
+    new (&_p_user) WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
+    new (&_p_pass) WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
+    new (&_p_sleep_time) WiFiManagerParameter("sleep_time", "Sleep time", Utils::millisToHuman(sleepTime).c_str(), 32);
+    new (&_p_loop_time) WiFiManagerParameter("loop_time", "Loop time", Utils::millisToHuman(loopTime).c_str(), 32);
+    // use number inputs so only digits/decimal allowed
+    new (&_p_rTop) WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
+    new (&_p_rBottom) WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
+
+    // add them in grouped order
+    wm.addParameter(&_p_group_general);
+    wm.addParameter(&_p_dev);
+
+    wm.addParameter(&_p_group_mqtt);
+    wm.addParameter(&_p_host);
+    wm.addParameter(&_p_user);
+    wm.addParameter(&_p_pass);
+
+    wm.addParameter(&_p_adv_begin);
+    wm.addParameter(&_p_sleep_time);
+    wm.addParameter(&_p_loop_time);
+    wm.addParameter(&_p_rTop);
+    wm.addParameter(&_p_rBottom);
+    wm.addParameter(&_p_adv_end);
+
+    wm.setConfigPortalTimeout(0);
+    wm.setShowStaticFields(true);
+    wm.setShowDnsFields(true);
+}

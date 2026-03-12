@@ -71,6 +71,8 @@ ADC
 
 ## 🧠 Firmware
 
+The code is now organized into several reusable C++ classes (`Config`, `WiFiConnector`, `Hardware`, `HAManager`, `SleepManager`, and utility helpers) so the core behaviour can be shared with other sensors or projects. The main `.ino` file merely wires the objects together and keeps the logic minimal.
+
 The sketch uses the Arduino framework and the following libraries:
 
 - **ArduinoHA** – automatic MQTT discovery for Home Assistant
@@ -101,7 +103,7 @@ Base topic: `aha/<device_id>/`
 | Availability       | `aha/…/avty_t`                           | `online`/`offline` |
 | Window state       | `aha/…/window/stat_t`                   | `OPEN`/`CLOSED`    |
 | Battery voltage    | `aha/…/battery`                          | e.g. `3.01`        |
-| OTA update command | `aha/…/update`                           | HTTP URL           |
+| OTA update command | `aha/…/update`                           | HTTP URL (URL is fetched by device for OTA) |
 
 Example command to trigger OTA:
 
@@ -138,10 +140,13 @@ The Wi‑Fi/MQTT portal is started when:
 
 ### Options in the portal
 
-- Wi‑Fi SSID/password
-- MQTT server URL/credentials
-- Device name
-- Optional static IP settings
+Configuration parameters are now organized into sections for easier navigation:
+
+- **General** – device name, Wi‑Fi credentials (SSID/password)
+- **MQTT** – broker host/user/pass
+- **Advanced** – sleep/loop timings and voltage divider values (collapsed by default; click to expand). The divider values are numeric-only inputs so letters cannot be entered.
+
+Older versions showed a flat list; the new layout uses headings so you can quickly find what you need.
 
 ---
 
