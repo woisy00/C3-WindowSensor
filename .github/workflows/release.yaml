@@ -28,6 +28,7 @@ jobs:
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string          
           script: |
             const tag = "${{ steps.version.outputs.version }}";
             const releases = await github.rest.repos.listReleases({
@@ -38,7 +39,7 @@ jobs:
             if (!rel) {
               core.setFailed(`no release found for tag ${tag}`);
             }
-            return { upload_url: rel.upload_url.replace('{?name,label}','') };
+            return rel.upload_url.replace('{?name,label}','');
 
       - name: Build PlatformIO Project
         working-directory: WindowSensor
@@ -58,7 +59,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.find_release.outputs.upload_url }}
+          upload_url: "${{ steps.find_release.outputs.result }}"
           asset_path: WindowSensor/.pio/build/esp32-c3-devkitm-1/firmware.bin
           asset_name: WindowSensor-${{ steps.version.outputs.version }}.bin
           asset_content_type: application/octet-stream
