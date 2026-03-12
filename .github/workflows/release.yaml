@@ -39,7 +39,8 @@ jobs:
             if (!rel) {
               core.setFailed(`no release found for tag ${tag}`);
             }
-            return rel.upload_url.replace('{?name,label}','');
+            
+            return rel.upload_url;
 
       - name: Build PlatformIO Project
         working-directory: WindowSensor
