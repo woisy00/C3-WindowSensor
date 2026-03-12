@@ -32,6 +32,10 @@ String mqtt_user;
 String mqtt_pass;
 unsigned long sleep_time;
 unsigned long loop_time;
+// resistor divider values used when converting ADC reading to battery voltage
+// stored and edited in kilo‑ohms (kΩ); default values reproduce original multiplier
+float rTop = 1000.0;    // 1m
+float rBottom = 680.0;  // 680 kΩ
 
 HADevice haDevice;
 HAMqtt mqtt(wifiClient, haDevice);
@@ -44,6 +48,8 @@ WiFiManagerParameter p_user;
 WiFiManagerParameter p_pass;
 WiFiManagerParameter p_sleep_time;
 WiFiManagerParameter p_loop_time;
+WiFiManagerParameter p_rTop;
+WiFiManagerParameter p_rBottom;
 
 bool shouldSaveConfig = false;
 
@@ -111,6 +117,10 @@ void saveConfig() {
   mqtt_pass = p_pass.getValue();
   sleep_time = parseDuration(p_sleep_time.getValue());
   loop_time = parseDuration(p_loop_time.getValue());
+
+  // update resistor divider values (kΩ) from portal fields
+  rTop = String(p_rTop.getValue()).toFloat();
+  rBottom = String(p_rBottom.getValue()).toFloat();
   
   prefs.begin("config", false);
   prefs.putString("dev", device_name);
@@ -120,6 +130,9 @@ void saveConfig() {
 
   prefs.putULong("sleep_time", sleep_time);
   prefs.putULong("loop_time", loop_time);
+
+  prefs.putFloat("rTop", rTop);
+  prefs.putFloat("rBottom", rBottom);
   
   prefs.end();
 }
@@ -133,6 +146,10 @@ bool loadConfig() {
 
   sleep_time = prefs.getULong("sleep_time", 4*60*60*1000);
   loop_time = prefs.getULong("loop_time", 3000);
+
+  // resistor divider defaults (kΩ) match globals if nothing stored
+  rTop = prefs.getFloat("rTop", rTop);
+  rBottom = prefs.getFloat("rBottom", rBottom);
   prefs.end();
 
   #ifdef DEBUG
@@ -143,6 +160,8 @@ bool loadConfig() {
   logMsg("  mqtt_pass: " + mqtt_pass);
   logMsg("  sleep_time: " + millisToHuman(sleep_time));
   logMsg("  loop_time: " + millisToHuman(loop_time));
+  logMsg("  rTop (kΩ): " + String(rTop));
+  logMsg("  rBottom (kΩ): " + String(rBottom));
   #endif
   return mqtt_host.length() > 0;
 }
@@ -163,13 +182,19 @@ void configureWiFiManager() {
 
   new (&p_sleep_time) WiFiManagerParameter("sleep_time", "Sleep time", millisToHuman(sleep_time).c_str(), 32);
   new (&p_loop_time) WiFiManagerParameter("loop_time", "Loop time", millisToHuman(loop_time).c_str(), 32);
+
+  // resistor divider configuration (top and bottom resistor values in ohms)
+  new (&p_rTop) WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16);
+  new (&p_rBottom) WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16);
   
   wm.addParameter(&p_dev);
   wm.addParameter(&p_host);
   wm.addParameter(&p_user);
   wm.addParameter(&p_pass);  
   wm.addParameter(&p_sleep_time);  
-  wm.addParameter(&p_loop_time);  
+  wm.addParameter(&p_loop_time);
+  wm.addParameter(&p_rTop);
+  wm.addParameter(&p_rBottom);
 
 
   wm.setSaveConfigCallback(saveConfigCallback);
@@ -284,10 +309,20 @@ float readBattery() {
 
   float adc_voltage = (raw / 4095.0) * 2.5;
 
-  float battery_voltage = adc_voltage * 3.128;
+  // compute battery voltage based on divider resistors rTop (top) and rBottom (bottom) in kΩ
+  // guard against invalid divider values (kΩ)
+  if (rBottom <= 0.0) {
+    #ifdef DEBUG
+    logMsg("Warning: rBottom is zero or negative, defaulting to 1 kΩ");
+    #endif
+    rBottom = 1.0;
+  }
+  // ratio independent of units (kΩ cancels out)
+  float ratio = (rTop + rBottom) / rBottom;
+  float battery_voltage = adc_voltage * ratio;
 
   #ifdef DEBUG
-  logMsg("Battery state: " + String(battery_voltage));
+  logMsg("Battery state: " + String(battery_voltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");
   #endif
   return battery_voltage;
 
