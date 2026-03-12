@@ -29,7 +29,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const tag = ${{ steps.version.outputs.version }};
+            const tag = "${{ steps.version.outputs.version }}";
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
