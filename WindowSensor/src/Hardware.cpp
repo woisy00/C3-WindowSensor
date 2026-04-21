@@ -10,6 +10,9 @@ void Hardware::initPins() {
     // setting it explicitly avoids accidental digital writes
     pinMode(PIN_BAT_ADC, INPUT);
     pinMode(PIN_BUTTON, INPUT_PULLUP);
+    // battery enable pin
+    pinMode(PIN_BAT_EN, OUTPUT);
+    digitalWrite(PIN_BAT_EN, HIGH);
 }
 
 bool Hardware::readWindowState() {
@@ -23,6 +26,10 @@ bool Hardware::readWindowState() {
 float Hardware::readBattery(float rTop, float rBottom) {
     analogReadResolution(12);
     analogSetPinAttenuation(PIN_BAT_ADC, ADC_11db);
+
+    // enable battery reading
+    digitalWrite(PIN_BAT_EN, LOW);
+    delay(10); // allow settling
 
     // discard first sample
     analogRead(PIN_BAT_ADC);
