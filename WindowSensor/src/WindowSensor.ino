@@ -1,3 +1,6 @@
+// Uncomment to enable debug logging
+// #define DEBUG 1
+
 #include "version.h"
 #include "Utils.h"
 #include "Config.h"
@@ -5,9 +8,6 @@
 #include "Hardware.h"
 #include "HAManager.h"
 #include "SleepManager.h"
-
-// Uncomment to enable debug logging
-// #define DEBUG 1
 
 Config config;
 WiFiConnector wifiConnector(config);

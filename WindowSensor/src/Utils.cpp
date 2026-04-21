@@ -42,9 +42,7 @@ String Utils::boolToString(bool b) {
     return b ? "true" : "false";
 }
 
-#ifdef DEBUG
 void Utils::logMsg(const String& message) {
     Serial.println(message);
     Serial.flush();
 }
-#endif

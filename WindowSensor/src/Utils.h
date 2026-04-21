@@ -7,7 +7,5 @@ public:
     static String millisToHuman(unsigned long ms);
     static String boolToString(bool b);
 
-#ifdef DEBUG
     static void logMsg(const String& message);
-#endif
 };
