@@ -1,6 +1,9 @@
 #include "Hardware.h"
 #include "Utils.h"
 #include <Arduino.h>
+#include "esp_adc_cal.h"
+
+esp_adc_cal_characteristics_t adc_chars;
 
 void Hardware::initPins() {
     // reed switch inputs
@@ -27,9 +30,18 @@ float Hardware::readBattery(float rTop, float rBottom) {
     analogReadResolution(12);
     analogSetPinAttenuation(PIN_BAT_ADC, ADC_11db);
 
+    esp_adc_cal_characterize(
+        ADC_UNIT_1,
+        ADC_ATTEN_DB_12,
+        ADC_WIDTH_BIT_12,
+        1100,               // default Vref (used if no eFuse)
+        &adc_chars
+    );
+
+
     // enable battery reading
     digitalWrite(PIN_BAT_EN, LOW);
-    delay(10); // allow settling
+    delay(50); // allow settling
 
     // discard first sample
     analogRead(PIN_BAT_ADC);
@@ -43,7 +55,10 @@ float Hardware::readBattery(float rTop, float rBottom) {
 
     uint16_t raw = sum / BATTERY_SAMPLES;
 
-    float adc_voltage = (raw / 4095.0) * 2.5;
+    // convert to millivolts using calibration
+    uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
+
+    //float adc_voltage = (raw / 4095.0) * 2.5;
 
     if (rBottom <= 0.0) {
 #ifdef DEBUG
@@ -52,7 +67,7 @@ float Hardware::readBattery(float rTop, float rBottom) {
         rBottom = 1.0;
     }
     float ratio = (rTop + rBottom) / rBottom;
-    float battery_voltage = adc_voltage * ratio;
+    float battery_voltage = voltage_mv / 1000.0 * ratio;
 
 #ifdef DEBUG
     Utils::logMsg("Battery state: " + String(battery_voltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");

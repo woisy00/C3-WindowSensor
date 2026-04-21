@@ -19,7 +19,7 @@ void HAManager::begin() {
     _haDevice.setName(_config.deviceName.c_str());
     _haDevice.setSoftwareVersion(VERSION);
     _haDevice.setModel("BWS-01");
-    _haDevice.setManufacturer("bergermeier");
+    _haDevice.setManufacturer("bergermeier");    
 
     _haDevice.enableSharedAvailability();
 

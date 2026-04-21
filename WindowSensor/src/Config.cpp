@@ -9,7 +9,7 @@ Config::Config()
       sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
       loopTime(3000UL),
       rTop(1000.0),
-      rBottom(680.0),
+      rBottom(470.0),
       _p_group_general(nullptr),
       _p_group_mqtt(nullptr),
       _p_adv_begin(nullptr),
@@ -26,16 +26,24 @@ Config::Config()
 }
 
 bool Config::load() {
-    _prefs.begin("config", true);
-    deviceName = _prefs.getString("dev", "");
-    mqttHost = _prefs.getString("mqtt_host", "");
-    mqttUser = _prefs.getString("mqtt_user", "");
-    mqttPass = _prefs.getString("mqtt_pass", "");
-    sleepTime = _prefs.getULong("sleep_time", sleepTime);
-    loopTime = _prefs.getULong("loop_time", loopTime);
-    rTop = _prefs.getFloat("rTop", rTop);
-    rBottom = _prefs.getFloat("rBottom", rBottom);
-    _prefs.end();
+    if (_prefs.begin("config", true)) {
+        deviceName = _prefs.getString("dev", "");
+        if (deviceName.length() == 0) {
+            deviceName = "window-sensor";            
+        } else {
+            mqttHost = _prefs.getString("mqtt_host", "");
+            mqttUser = _prefs.getString("mqtt_user", "");
+            mqttPass = _prefs.getString("mqtt_pass", "");
+            sleepTime = _prefs.getULong("sleep_time", sleepTime);
+            loopTime = _prefs.getULong("loop_time", loopTime);
+            rTop = _prefs.getFloat("rTop", rTop);
+            rBottom = _prefs.getFloat("rBottom", rBottom);
+        }
+        _prefs.end();        
+    } else {
+        // Set fallback device name if NVS is empty
+        deviceName = "window-sensor";
+    }
 
 #ifdef DEBUG
     Utils::logMsg("Loaded config:");

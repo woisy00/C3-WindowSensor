@@ -4,8 +4,8 @@
 
 class Hardware {
 public:
-    static constexpr int PIN_NO = 2;
-    static constexpr int PIN_NC = 1;
+    static constexpr int PIN_NO = 1;
+    static constexpr int PIN_NC = 2;
     static constexpr int PIN_BAT_ADC = 4;
     static constexpr int PIN_BAT_EN = 3;
     static constexpr int PIN_BUTTON = 5;

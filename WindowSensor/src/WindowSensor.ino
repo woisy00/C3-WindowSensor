@@ -13,7 +13,6 @@ Config config;
 WiFiConnector wifiConnector(config);
 HAManager haManager(config);
 
-bool windowOpen = false;
 unsigned long wakeDeadline = 0;
 
 void setup() {
@@ -35,11 +34,11 @@ void setup() {
 
     haManager.begin();
 
-    windowOpen = Hardware::readWindowState();
+    bool windowOpen = Hardware::readWindowState();
     float battery = Hardware::readBattery(config.rTop, config.rBottom);
 
     haManager.publishWindow(windowOpen, true);
-    haManager.publishBattery(battery, true);
+    haManager.publishBattery(battery, true);    
 #ifdef DEBUG
     Utils::logMsg("Sending state to HA: window: " + Utils::boolToString(windowOpen) + ", batt: " + String(battery));
 #endif
@@ -50,6 +49,12 @@ void setup() {
 void loop() {
     haManager.loop();
 
+    bool windowOpen = Hardware::readWindowState();
+    float battery = Hardware::readBattery(config.rTop, config.rBottom);
+
+    haManager.publishWindow(windowOpen, false);
+    haManager.publishBattery(battery, false);  
+      
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);
     }
