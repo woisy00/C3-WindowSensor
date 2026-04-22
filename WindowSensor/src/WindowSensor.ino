@@ -13,6 +13,7 @@ Config config;
 WiFiConnector wifiConnector(config);
 HAManager haManager(config);
 
+bool windowOpen = false;
 unsigned long wakeDeadline = 0;
 
 void setup() {
@@ -34,7 +35,7 @@ void setup() {
 
     haManager.begin();
 
-    bool windowOpen = Hardware::readWindowState();
+    windowOpen = Hardware::readWindowState();
     float battery = Hardware::readBattery(config.rTop, config.rBottom);
 
     haManager.publishWindow(windowOpen, true);
