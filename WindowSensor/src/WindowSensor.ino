@@ -49,11 +49,11 @@ void setup() {
 void loop() {
     haManager.loop();
 
-    bool windowOpen = Hardware::readWindowState();
-    float battery = Hardware::readBattery(config.rTop, config.rBottom);
+    //bool windowOpen = Hardware::readWindowState();
+    //float battery = Hardware::readBattery(config.rTop, config.rBottom);
 
-    haManager.publishWindow(windowOpen, false);
-    haManager.publishBattery(battery, false);  
+    //haManager.publishWindow(windowOpen, false);
+    //haManager.publishBattery(battery, false);  
       
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);

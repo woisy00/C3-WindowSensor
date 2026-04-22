@@ -20,10 +20,12 @@ void Hardware::initPins() {
 
 bool Hardware::readWindowState() {
     bool no = digitalRead(PIN_NO);
+    bool nc = digitalRead(PIN_NC);
 #ifdef DEBUG
     Utils::logMsg("Read window state: " + Utils::boolToString(no));
 #endif
-    return no == LOW;
+    # read the NO and NC pins and determine window state
+    return no == LOW || nc == HIGH;
 }
 
 float Hardware::readBattery(float rTop, float rBottom) {
