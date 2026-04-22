@@ -24,7 +24,7 @@ bool Hardware::readWindowState() {
 #ifdef DEBUG
     Utils::logMsg("Read window state: " + Utils::boolToString(no));
 #endif
-    # read the NO and NC pins and determine window state
+    // read the NO and NC pins and determine window state
     return no == LOW || nc == HIGH;
 }
 
