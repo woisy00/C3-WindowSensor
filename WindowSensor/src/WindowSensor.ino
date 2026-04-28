@@ -34,7 +34,7 @@ void setup() {
 
     wifiConnector.connect(!configExists || portalRequested);
 
-    haManager.begin();
+    haManager.begin();    
 
     windowOpen = Hardware::readWindowState();
     battery = Hardware::readBattery(config.rTop, config.rBottom);

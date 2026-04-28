@@ -27,4 +27,6 @@ private:
     HASensorNumber _batteryPercent;
 
     static HAManager* _instance;
+
+    static void onMessage(const char* topic, const uint8_t* payload, uint16_t length);
 };
