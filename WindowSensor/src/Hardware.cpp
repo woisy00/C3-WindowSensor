@@ -2,6 +2,7 @@
 #include "Utils.h"
 #include <Arduino.h>
 #include "esp_adc_cal.h"
+#include "WindowSensorDefines.h"
 
 esp_adc_cal_characteristics_t adc_chars;
 
@@ -22,9 +23,7 @@ bool Hardware::readWindowState() {
     delay(10); // allow settling
     bool no = digitalRead(PIN_NO);
     //bool nc = digitalRead(PIN_NC);
-#ifdef DEBUG
-    Utils::logMsg("Read window state: " + Utils::boolToString(no));
-#endif
+    DEBUG_PRINTLN("Read window state: " + Utils::boolToString(no));
     // read the NO and NC pins and determine window state
     return no == LOW; // || nc == HIGH;
 }
@@ -64,17 +63,13 @@ float Hardware::readBattery(float rTop, float rBottom) {
     //float adc_voltage = (raw / 4095.0) * 2.5;
 
     if (rBottom <= 0.0) {
-#ifdef DEBUG
-        Utils::logMsg("Warning: rBottom is zero or negative, defaulting to 1 kΩ");
-#endif
+        DEBUG_PRINTLN("Warning: rBottom is zero or negative, defaulting to 1 kΩ");
         rBottom = 1.0;
     }
     float ratio = (rTop + rBottom) / rBottom;
     float battery_voltage = voltage_mv / 1000.0 * ratio;
 
-#ifdef DEBUG
-    Utils::logMsg("Battery state: " + String(battery_voltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");
-#endif
+    DEBUG_PRINTLN("Battery state: " + String(battery_voltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");
     return battery_voltage;
 }
 

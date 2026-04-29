@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
+#include "WindowSensorDefines.h"
 
 HAManager* HAManager::_instance = nullptr;
 
@@ -56,8 +57,8 @@ void HAManager::begin() {
 
     // Subscribe to firmware update topic using device unique ID
     String topic = String("homeassistant/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
-    _mqtt.subscribe(topic.c_str());
     _mqtt.onMessage(onMessage);
+    _mqtt.subscribe(topic.c_str());
 }
 
 // --- Loop ---
@@ -89,31 +90,31 @@ void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t le
         for (uint16_t i = 0; i < length; i++) {
             message += (char)payload[i];
         }
-        Utils::logMsg("Firmware update request received on topic: " + String(topic));
-        Utils::logMsg("Message: " + message);
+        DEBUG_PRINTLN("Firmware update request received on topic: " + String(topic));
+        DEBUG_PRINTLN("Message: " + message);
 
         // Parse JSON message
         JsonDocument doc;
         DeserializationError error = deserializeJson(doc, message);
         if (error) {
-            Utils::logMsg("Failed to parse JSON: " + String(error.c_str()));
+            DEBUG_PRINTLN("Failed to parse JSON: " + String(error.c_str()));
             return;
         }
 
         if (doc["url"]) {
             String firmwareUrl = doc["url"];
-            Utils::logMsg("Starting firmware update from: " + firmwareUrl);
+            DEBUG_PRINTLN("Starting firmware update from: " + firmwareUrl);
             WiFiClient client;
             HTTPUpdate httpUpdate;
             HTTPUpdateResult result = httpUpdate.update(client, firmwareUrl);
             if (result == HTTP_UPDATE_OK) {
-                Utils::logMsg("Firmware update successful. Restarting...");
+                DEBUG_PRINTLN("Firmware update successful. Restarting...");
                 ESP.restart();
             } else {
-                Utils::logMsg("Firmware update failed. Error: " + String(httpUpdate.getLastError()) + " - " + httpUpdate.getLastErrorString());
+                DEBUG_PRINTLN("Firmware update failed. Error: " + String(httpUpdate.getLastError()) + " - " + httpUpdate.getLastErrorString());
             }
         } else {
-            Utils::logMsg("JSON message missing 'url' field");
+            DEBUG_PRINTLN("JSON message missing 'url' field");
         }
     }
 }

@@ -1,3 +1,4 @@
+#include "WindowSensorDefines.h"
 #include "Config.h"
 #include "Utils.h"
 
@@ -45,17 +46,15 @@ bool Config::load() {
         deviceName = "window-sensor";
     }
 
-#ifdef DEBUG
-    Utils::logMsg("Loaded config:");
-    Utils::logMsg("  device_name: " + deviceName);
-    Utils::logMsg("  mqtt_host: " + mqttHost);
-    Utils::logMsg("  mqtt_user: " + mqttUser);
-    Utils::logMsg("  mqtt_pass: " + mqttPass);
-    Utils::logMsg("  sleep_time: " + Utils::millisToHuman(sleepTime));
-    Utils::logMsg("  loop_time: " + Utils::millisToHuman(loopTime));
-    Utils::logMsg("  rTop (kΩ): " + String(rTop));
-    Utils::logMsg("  rBottom (kΩ): " + String(rBottom));
-#endif
+    DEBUG_PRINTLN("Loaded config:");
+    DEBUG_PRINTLN("  device_name: " + deviceName);
+    DEBUG_PRINTLN("  mqtt_host: " + mqttHost);
+    DEBUG_PRINTLN("  mqtt_user: " + mqttUser);
+    DEBUG_PRINTLN("  mqtt_pass: " + mqttPass);
+    DEBUG_PRINTLN("  sleep_time: " + Utils::millisToHuman(sleepTime));
+    DEBUG_PRINTLN("  loop_time: " + Utils::millisToHuman(loopTime));
+    DEBUG_PRINTLN("  rTop (kΩ): " + String(rTop));
+    DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
 
     return mqttHost.length() > 0;
 }

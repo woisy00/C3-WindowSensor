@@ -4,6 +4,7 @@
 #include <WiFiClient.h>
 #include "Config.h"
 #include "BatteryUtil.h"
+#include "WindowSensorDefines.h"
 
 class HAManager {
 public:

@@ -41,8 +41,3 @@ String Utils::millisToHuman(unsigned long ms) {
 String Utils::boolToString(bool b) {
     return b ? "true" : "false";
 }
-
-void Utils::logMsg(const String& message) {
-    Serial.println(message);
-    Serial.flush();
-}

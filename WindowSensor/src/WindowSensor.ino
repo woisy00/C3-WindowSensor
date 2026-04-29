@@ -1,5 +1,8 @@
 // Uncomment to enable debug logging
-// #define DEBUG 1
+#define DEBUG 1
+//#define ARDUINOHA_DEBUG
+
+#include "WindowSensorDefines.h"
 
 #include "version.h"
 #include "Utils.h"
@@ -18,19 +21,15 @@ unsigned long wakeDeadline = 0;
 float battery = 0.0;
 
 void setup() {
-#ifdef DEBUG
-    Serial.begin(115200);
-#endif
+    DEBUG_INIT();
 
     Hardware::initPins();
 
     bool configExists = config.load();
     bool portalRequested = Hardware::bootButtonPressed();
-#ifdef DEBUG
-    Utils::logMsg("Portal requested");
-    Utils::logMsg("  config: " + Utils::boolToString(configExists));
-    Utils::logMsg("  button: " + Utils::boolToString(portalRequested));
-#endif
+    DEBUG_PRINTLN("Portal requested");
+    DEBUG_PRINTLN("  config: " + Utils::boolToString(configExists));
+    DEBUG_PRINTLN("  button: " + Utils::boolToString(portalRequested));
 
     wifiConnector.connect(!configExists || portalRequested);
 
@@ -41,12 +40,9 @@ void setup() {
 
     //haManager.publishWindow(windowOpen, true);
     //haManager.publishBattery(battery, true);    
-#ifdef DEBUG
-    Utils::logMsg("Sending state to HA: window: " + Utils::boolToString(windowOpen) + ", batt: " + String(battery));
-#endif
+    DEBUG_PRINTLN("Sending state to HA: window: " + Utils::boolToString(windowOpen) + ", batt: " + String(battery));
 
-
-wakeDeadline = millis() + config.loopTime;
+    wakeDeadline = millis() + config.loopTime;
 }
 
 void loop() {

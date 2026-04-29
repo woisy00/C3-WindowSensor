@@ -2,6 +2,7 @@
 #include "Utils.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include "WindowSensorDefines.h"
 
 WiFiConnector* WiFiConnector::_instance = nullptr;
 
@@ -31,16 +32,12 @@ void WiFiConnector::connect(bool forceConfig) {
     bool rebootRequested = false;
 
     if (MDNS.begin(_config.deviceName.c_str())) {
-#ifdef DEBUG
-        Utils::logMsg("mDNS " + _config.deviceName + ".local ready");
-#endif
+        DEBUG_PRINTLN("mDNS " + _config.deviceName + ".local ready");
     }
 
     if (WiFi.waitForConnectResult(8000) != WL_CONNECTED) {
         rebootRequested = true;
-#ifdef DEBUG
-        Utils::logMsg("WiFi failed... starting captive portal");
-#endif
+        DEBUG_PRINTLN("WiFi failed... starting captive portal");
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
         _wm.startConfigPortal("Window-Sensor");
@@ -52,16 +49,12 @@ void WiFiConnector::connect(bool forceConfig) {
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
         _wm.startWebPortal();
-#ifdef DEBUG
-        Utils::logMsg("Portal running");
-#endif
+        DEBUG_PRINTLN("Portal running");
         while (_wm.getWebPortalActive()) {
             _wm.process();
             delay(100);
         }
-#ifdef DEBUG
-        Utils::logMsg("Exited portal");
-#endif
+        DEBUG_PRINTLN("Exited portal");
     } else {
         WiFi.hostname(_config.deviceName);
         _wm.setHostname(_config.deviceName);
@@ -73,9 +66,7 @@ void WiFiConnector::connect(bool forceConfig) {
     }
 
     if (rebootRequested) {
-#ifdef DEBUG
-        Utils::logMsg("Rebooting after WiFiManager exited");
-#endif
+        DEBUG_PRINTLN("Rebooting after WiFiManager exited");
         ESP.restart();
     }
 }
