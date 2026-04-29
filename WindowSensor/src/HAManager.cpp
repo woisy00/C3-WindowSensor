@@ -13,10 +13,7 @@ HAManager* HAManager::_instance = nullptr;
 HAManager::HAManager(Config& cfg)
     : _config(cfg),
       _haDevice(),
-      _mqtt(_wifiClient, _haDevice),
-      _windowSensor("window"),
-      _batterySensor("battery_voltage", HASensorNumber::PrecisionP2),
-      _batteryPercent("battery_percent", HASensorNumber::PrecisionP0) {
+      _mqtt(_wifiClient, _haDevice) {
     _instance = this;
 }
 
@@ -30,23 +27,38 @@ void HAManager::begin() {
     _haDevice.setName(_config.deviceName.c_str());
     _haDevice.setSoftwareVersion(VERSION);
     _haDevice.setModel("BWS-01");
-    _haDevice.setManufacturer("bergermeier");
+    _haDevice.setManufacturer("bergermeier");    
 
     _haDevice.enableSharedAvailability();
+    
+    // Create unique IDs
+    _windowUniqueId = _config.deviceName + "_window";
+    _batteryVoltageUniqueId = _config.deviceName + "_battery_voltage";
+    _batteryPercentUniqueId = _config.deviceName + "_battery_percent";
 
+    String base = _config.deviceName.c_str();
     // Window sensor
-    _windowSensor.setDeviceClass("window");
-    _windowSensor.setName("Window Sensor");
+    _windowSensor = new HABinarySensor(_windowUniqueId.c_str());
+    _windowSensor->setDeviceClass("window");
+    _windowSensor->setName("Window Sensor");
+    _mqtt.addDeviceType(_windowSensor);
+    DEBUG_PRINTLN("Created window sensor with unique ID: " + _windowUniqueId);
 
     // Battery voltage
-    _batterySensor.setName("Battery voltage");
-    _batterySensor.setDeviceClass("voltage");
-    _batterySensor.setUnitOfMeasurement("V");
+    _batterySensor = new HASensorNumber(_batteryVoltageUniqueId.c_str(), HASensorNumber::PrecisionP2);
+    _batterySensor->setName("Battery voltage");
+    _batterySensor->setDeviceClass("voltage");
+    _batterySensor->setUnitOfMeasurement("V");    
+    _mqtt.addDeviceType(_batterySensor);
+    DEBUG_PRINTLN("Created battery voltage sensor with unique ID: " + _batteryVoltageUniqueId);
 
     // Battery %
-    _batteryPercent.setName("Battery");
-    _batteryPercent.setDeviceClass("battery");
-    _batteryPercent.setUnitOfMeasurement("%");
+    _batteryPercent = new HASensorNumber(_batteryPercentUniqueId.c_str(), HASensorNumber::PrecisionP0);
+    _batteryPercent->setName("Battery");
+    _batteryPercent->setDeviceClass("battery");
+    _batteryPercent->setUnitOfMeasurement("%");
+    _mqtt.addDeviceType(_batteryPercent);
+    DEBUG_PRINTLN("Created battery percentage sensor with unique ID: " + _batteryPercentUniqueId);
 
 
     _mqtt.begin(
@@ -56,9 +68,15 @@ void HAManager::begin() {
     );
 
     // Subscribe to firmware update topic using device unique ID
-    String topic = String("homeassistant/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
+    _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
+    //DEBUG_PRINTLN("Subscribing to firmware update topic: " + _firmwareUpdateTopic);
     _mqtt.onMessage(onMessage);
-    _mqtt.subscribe(topic.c_str());
+    _mqtt.onConnected([]() {
+        _instance->_mqtt.subscribe(_instance->_firmwareUpdateTopic.c_str());
+        DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _instance->_firmwareUpdateTopic);
+    });
+    //_mqtt.subscribe(_firmwareUpdateTopic.c_str());
+    //DEBUG_PRINTLN("Subscribed to firmware update topic: " + _firmwareUpdateTopic);
 }
 
 // --- Loop ---
@@ -70,16 +88,16 @@ void HAManager::loop() {
 // --- Publishers ---
 
 void HAManager::publishWindow(bool open, bool force) {
-    _windowSensor.setState(open, force);
+    _windowSensor->setState(open, force);
 }
 
 void HAManager::publishBattery(float voltage, bool force) {
-    _batterySensor.setValue(voltage, force);
+    _batterySensor->setValue(voltage, force);
 
     // Default: alkaline (can be made configurable later)
     float percent = BatteryUtil::voltageToPercent(voltage, BatteryType::ALKALINE);
 
-    _batteryPercent.setValue(percent, force);
+    _batteryPercent->setValue(percent, force);
 }
 
 // --- MQTT Callbacks ---
@@ -104,8 +122,10 @@ void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t le
         if (doc["url"]) {
             String firmwareUrl = doc["url"];
             DEBUG_PRINTLN("Starting firmware update from: " + firmwareUrl);
-            WiFiClient client;
             HTTPUpdate httpUpdate;
+            HTTPClient client;
+            client.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+            
             HTTPUpdateResult result = httpUpdate.update(client, firmwareUrl);
             if (result == HTTP_UPDATE_OK) {
                 DEBUG_PRINTLN("Firmware update successful. Restarting...");

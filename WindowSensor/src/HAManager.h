@@ -23,9 +23,14 @@ private:
     HADevice _haDevice;
     HAMqtt _mqtt;
 
-    HABinarySensor _windowSensor;
-    HASensorNumber _batterySensor;
-    HASensorNumber _batteryPercent;
+    HABinarySensor* _windowSensor;
+    HASensorNumber* _batterySensor;
+    HASensorNumber* _batteryPercent;
+
+    String _windowUniqueId;
+    String _batteryVoltageUniqueId;
+    String _batteryPercentUniqueId;
+    String _firmwareUpdateTopic;
 
     static HAManager* _instance;
 

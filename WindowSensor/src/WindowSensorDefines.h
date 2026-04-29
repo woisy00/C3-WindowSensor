@@ -1,5 +1,5 @@
-// #define DEBUG
-// #define ARDUINOHA_DEBUG
+//#define DEBUG
+//#define ARDUINOHA_DEBUG
 
 
 #if defined(DEBUG)

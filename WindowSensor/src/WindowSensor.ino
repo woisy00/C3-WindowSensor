@@ -1,6 +1,4 @@
 // Uncomment to enable debug logging
-#define DEBUG 1
-//#define ARDUINOHA_DEBUG
 
 #include "WindowSensorDefines.h"
 
@@ -53,7 +51,7 @@ void loop() {
 
     haManager.publishWindow(windowOpen, false);
     haManager.publishBattery(battery, false);  
-      
+    
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);
     }
