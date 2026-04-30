@@ -46,15 +46,15 @@ void setup() {
 void loop() {
     haManager.loop();
 
+    #ifndef DEBUG
     windowOpen = Hardware::readWindowState();
     //float battery = Hardware::readBattery(config.rTop, config.rBottom);
-
     haManager.publishWindow(windowOpen, false);
     haManager.publishBattery(battery, false);  
-    
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);
     }
+    #endif
 
     delay(5);
 }

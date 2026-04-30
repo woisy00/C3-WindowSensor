@@ -5,6 +5,7 @@
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
 #include "WindowSensorDefines.h"
+#include "UpdateManager.h"
 
 HAManager* HAManager::_instance = nullptr;
 
@@ -100,8 +101,6 @@ void HAManager::publishBattery(float voltage, bool force) {
     _batteryPercent->setValue(percent, force);
 }
 
-// --- MQTT Callbacks ---
-
 void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
     if (_instance) {
         String message;
@@ -111,30 +110,6 @@ void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t le
         DEBUG_PRINTLN("Firmware update request received on topic: " + String(topic));
         DEBUG_PRINTLN("Message: " + message);
 
-        // Parse JSON message
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, message);
-        if (error) {
-            DEBUG_PRINTLN("Failed to parse JSON: " + String(error.c_str()));
-            return;
-        }
-
-        if (doc["url"]) {
-            String firmwareUrl = doc["url"];
-            DEBUG_PRINTLN("Starting firmware update from: " + firmwareUrl);
-            HTTPUpdate httpUpdate;
-            HTTPClient client;
-            client.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-            
-            HTTPUpdateResult result = httpUpdate.update(client, firmwareUrl);
-            if (result == HTTP_UPDATE_OK) {
-                DEBUG_PRINTLN("Firmware update successful. Restarting...");
-                ESP.restart();
-            } else {
-                DEBUG_PRINTLN("Firmware update failed. Error: " + String(httpUpdate.getLastError()) + " - " + httpUpdate.getLastErrorString());
-            }
-        } else {
-            DEBUG_PRINTLN("JSON message missing 'url' field");
-        }
+        UpdateManager::performUpdate(message);
     }
 }
