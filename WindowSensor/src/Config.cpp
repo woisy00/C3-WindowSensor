@@ -2,28 +2,14 @@
 #include "Config.h"
 #include "Utils.h"
 
-Config::Config()
-    : deviceName(""),
+Config::Config() : deviceName(""),
       mqttHost(""),
       mqttUser(""),
       mqttPass(""),
       sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
       loopTime(3000UL),
       rTop(1000.0),
-      rBottom(470.0),
-      _p_group_general(nullptr),
-      _p_group_mqtt(nullptr),
-      _p_adv_begin(nullptr),
-      _p_adv_end(nullptr),
-      _p_dev(nullptr),
-      _p_host(nullptr),
-      _p_user(nullptr),
-      _p_pass(nullptr),
-      _p_sleep_time(nullptr),
-      _p_loop_time(nullptr),
-      _p_rTop(nullptr),
-      _p_rBottom(nullptr),
-      _shouldSave(false) {
+      rBottom(470.0) {
 }
 
 bool Config::load() {
@@ -61,15 +47,15 @@ bool Config::load() {
 
 void Config::save() {
     // update fields from portal parameters if they exist
-    if (_p_dev.getValue() != nullptr) {
-        deviceName = _p_dev.getValue();
-        mqttHost = _p_host.getValue();
-        mqttUser = _p_user.getValue();
-        mqttPass = _p_pass.getValue();
-        sleepTime = Utils::parseDuration(_p_sleep_time.getValue());
-        loopTime = Utils::parseDuration(_p_loop_time.getValue());
-        rTop = String(_p_rTop.getValue()).toFloat();
-        rBottom = String(_p_rBottom.getValue()).toFloat();
+    if (_p_dev->getValue() != nullptr) {
+        deviceName = _p_dev->getValue();
+        mqttHost = _p_host->getValue();
+        mqttUser = _p_user->getValue();
+        mqttPass = _p_pass->getValue();
+        sleepTime = Utils::parseDuration(_p_sleep_time->getValue());
+        loopTime = Utils::parseDuration(_p_loop_time->getValue());
+        rTop = String(_p_rTop->getValue()).toFloat();
+        rBottom = String(_p_rBottom->getValue()).toFloat();
     }
 
     _prefs.begin("config", false);
@@ -85,38 +71,39 @@ void Config::save() {
 }
 
 void Config::configureWiFiManager(WiFiManager& wm) {
-    // create group headers using custom HTML parameters
-    new (&_p_group_general) WiFiManagerParameter("<h2>General</h2><hr>");
-    new (&_p_group_mqtt) WiFiManagerParameter("<h2>MQTT</h2><hr>");
-    // advanced section start/end tags
-    new (&_p_adv_begin) WiFiManagerParameter("<details><summary>Advanced</summary>");
-    new (&_p_adv_end) WiFiManagerParameter("</details>");
 
-    new (&_p_dev) WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
-    new (&_p_host) WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
-    new (&_p_user) WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
-    new (&_p_pass) WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
-    new (&_p_sleep_time) WiFiManagerParameter("sleep_time", "Sleep time", Utils::millisToHuman(sleepTime).c_str(), 32);
-    new (&_p_loop_time) WiFiManagerParameter("loop_time", "Loop time", Utils::millisToHuman(loopTime).c_str(), 32);
+    // create group headers using custom HTML parameters
+    _p_group_general = new WiFiManagerParameter("<h2>General</h2><hr>");
+    _p_group_mqtt = new WiFiManagerParameter("<h2>MQTT</h2><hr>");
+    // advanced section start/end tags
+    _p_adv_begin = new WiFiManagerParameter("<details><summary>Advanced</summary>");
+    _p_adv_end = new WiFiManagerParameter("</details>");
+
+    _p_dev = new WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
+    _p_host = new WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
+    _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
+    _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
+    _p_sleep_time = new WiFiManagerParameter("sleep_time", "Sleep time", Utils::millisToHuman(sleepTime).c_str(), 32);
+    _p_loop_time = new WiFiManagerParameter("loop_time", "Loop time", Utils::millisToHuman(loopTime).c_str(), 32);
     // use number inputs so only digits/decimal allowed
-    new (&_p_rTop) WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
-    new (&_p_rBottom) WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
+    _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
+    _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
 
     // add them in grouped order
-    wm.addParameter(&_p_group_general);
-    wm.addParameter(&_p_dev);
+    wm.addParameter(_p_group_general);
+    wm.addParameter(_p_dev);
 
-    wm.addParameter(&_p_group_mqtt);
-    wm.addParameter(&_p_host);
-    wm.addParameter(&_p_user);
-    wm.addParameter(&_p_pass);
+    wm.addParameter(_p_group_mqtt);
+    wm.addParameter(_p_host);
+    wm.addParameter(_p_user);
+    wm.addParameter(_p_pass);
 
-    wm.addParameter(&_p_adv_begin);
-    wm.addParameter(&_p_sleep_time);
-    wm.addParameter(&_p_loop_time);
-    wm.addParameter(&_p_rTop);
-    wm.addParameter(&_p_rBottom);
-    wm.addParameter(&_p_adv_end);
+    wm.addParameter(_p_adv_begin);
+    wm.addParameter(_p_sleep_time);
+    wm.addParameter(_p_loop_time);
+    wm.addParameter(_p_rTop);
+    wm.addParameter(_p_rBottom);
+    wm.addParameter(_p_adv_end);
 
     wm.setConfigPortalTimeout(0);
     wm.setShowStaticFields(true);

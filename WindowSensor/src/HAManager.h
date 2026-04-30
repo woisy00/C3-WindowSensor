@@ -33,6 +33,7 @@ private:
     bool _firstLoop = true;
     bool _windowState;
     float _batteryVoltage;
+    String _configUrl;
 
     static HAManager* _instance;
 

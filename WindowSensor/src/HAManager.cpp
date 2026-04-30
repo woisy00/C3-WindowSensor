@@ -37,6 +37,10 @@ void HAManager::begin() {
     _haDevice.enableSharedAvailability();
     _haDevice.enableExtendedUniqueIds();
     
+    // set configuration url
+    _configUrl = String("http://") + WiFi.localIP().toString();
+    _haDevice.setConfigurationUrl(_configUrl.c_str());
+
     // Create unique IDs
     _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
 
