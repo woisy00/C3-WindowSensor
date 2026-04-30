@@ -1,5 +1,5 @@
-//#define DEBUG
-//#define ARDUINOHA_DEBUG
+// #define DEBUG
+// #define ARDUINOHA_DEBUG
 
 
 #if defined(DEBUG)
@@ -13,3 +13,7 @@
     #define DEBUG_PRINTLN(x)
     #define DEBUG_PRINT(x)
 #endif
+
+
+#define HW_MODEL "BWS-01"
+#define HW_MANUFACTURER "bergermeier"

@@ -36,9 +36,8 @@ void setup() {
     windowOpen = Hardware::readWindowState();
     battery = Hardware::readBattery(config.rTop, config.rBottom);
 
-    //haManager.publishWindow(windowOpen, true);
-    //haManager.publishBattery(battery, true);    
-    DEBUG_PRINTLN("Sending state to HA: window: " + Utils::boolToString(windowOpen) + ", batt: " + String(battery));
+    haManager.setWindowState(windowOpen);
+    haManager.setBatteryState(battery);
 
     wakeDeadline = millis() + config.loopTime;
 }
@@ -49,12 +48,10 @@ void loop() {
     #ifndef DEBUG
     windowOpen = Hardware::readWindowState();
     //float battery = Hardware::readBattery(config.rTop, config.rBottom);
-    haManager.publishWindow(windowOpen, false);
-    haManager.publishBattery(battery, false);  
+    haManager.setWindowState(windowOpen);
+    haManager.setBatteryState(battery);
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);
     }
     #endif
-
-    delay(5);
 }

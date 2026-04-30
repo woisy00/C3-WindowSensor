@@ -13,8 +13,8 @@ public:
     void begin();
     void loop();
 
-    void publishWindow(bool open, bool force = true);
-    void publishBattery(float voltage, bool force = true);
+    void setWindowState(bool open);
+    void setBatteryState(float voltage);
 
 private:
     Config& _config;
@@ -23,14 +23,16 @@ private:
     HADevice _haDevice;
     HAMqtt _mqtt;
 
-    HABinarySensor* _windowSensor;
-    HASensorNumber* _batterySensor;
-    HASensorNumber* _batteryPercent;
+    HABinarySensor _windowSensor;
+    HASensorNumber _batterySensor;
+    HASensorNumber _batteryPercent;
+    HASensor _firmwareVersion;
 
-    String _windowUniqueId;
-    String _batteryVoltageUniqueId;
-    String _batteryPercentUniqueId;
     String _firmwareUpdateTopic;
+
+    bool _firstLoop = true;
+    bool _windowState;
+    float _batteryVoltage;
 
     static HAManager* _instance;
 

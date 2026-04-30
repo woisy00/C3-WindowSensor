@@ -14,7 +14,11 @@ HAManager* HAManager::_instance = nullptr;
 HAManager::HAManager(Config& cfg)
     : _config(cfg),
       _haDevice(),
-      _mqtt(_wifiClient, _haDevice) {
+      _mqtt(_wifiClient, _haDevice),
+      _firmwareVersion("firmware", HASensor::JsonAttributesFeature),
+      _windowSensor("window"),
+      _batterySensor("battery_voltage", HASensorNumber::PrecisionP2),
+      _batteryPercent("battery_percent", HASensorNumber::PrecisionP0) {
     _instance = this;
 }
 
@@ -27,39 +31,36 @@ void HAManager::begin() {
     _haDevice.setUniqueId(mac, sizeof(mac));
     _haDevice.setName(_config.deviceName.c_str());
     _haDevice.setSoftwareVersion(VERSION);
-    _haDevice.setModel("BWS-01");
-    _haDevice.setManufacturer("bergermeier");    
+    _haDevice.setModel(HW_MODEL);
+    _haDevice.setManufacturer(HW_MANUFACTURER);    
 
     _haDevice.enableSharedAvailability();
+    _haDevice.enableExtendedUniqueIds();
     
     // Create unique IDs
-    _windowUniqueId = _config.deviceName + "_window";
-    _batteryVoltageUniqueId = _config.deviceName + "_battery_voltage";
-    _batteryPercentUniqueId = _config.deviceName + "_battery_percent";
+    _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
 
-    String base = _config.deviceName.c_str();
+    // Firmware version sensor
+    _firmwareVersion.setName("Firmware version");
+    //_firmwareVersion->setDeviceClass("firmware");
+    _mqtt.addDeviceType(&_firmwareVersion);
+    
     // Window sensor
-    _windowSensor = new HABinarySensor(_windowUniqueId.c_str());
-    _windowSensor->setDeviceClass("window");
-    _windowSensor->setName("Window Sensor");
-    _mqtt.addDeviceType(_windowSensor);
-    DEBUG_PRINTLN("Created window sensor with unique ID: " + _windowUniqueId);
+    _windowSensor.setDeviceClass("window");
+    _windowSensor.setName("Window Sensor");
+    _mqtt.addDeviceType(&_windowSensor);
 
     // Battery voltage
-    _batterySensor = new HASensorNumber(_batteryVoltageUniqueId.c_str(), HASensorNumber::PrecisionP2);
-    _batterySensor->setName("Battery voltage");
-    _batterySensor->setDeviceClass("voltage");
-    _batterySensor->setUnitOfMeasurement("V");    
-    _mqtt.addDeviceType(_batterySensor);
-    DEBUG_PRINTLN("Created battery voltage sensor with unique ID: " + _batteryVoltageUniqueId);
+    _batterySensor.setName("Battery voltage");
+    _batterySensor.setDeviceClass("voltage");
+    _batterySensor.setUnitOfMeasurement("V");    
+    _mqtt.addDeviceType(&_batterySensor);
 
     // Battery %
-    _batteryPercent = new HASensorNumber(_batteryPercentUniqueId.c_str(), HASensorNumber::PrecisionP0);
-    _batteryPercent->setName("Battery");
-    _batteryPercent->setDeviceClass("battery");
-    _batteryPercent->setUnitOfMeasurement("%");
-    _mqtt.addDeviceType(_batteryPercent);
-    DEBUG_PRINTLN("Created battery percentage sensor with unique ID: " + _batteryPercentUniqueId);
+    _batteryPercent.setName("Battery");
+    _batteryPercent.setDeviceClass("battery");
+    _batteryPercent.setUnitOfMeasurement("%");
+    _mqtt.addDeviceType(&_batteryPercent);
 
 
     _mqtt.begin(
@@ -68,13 +69,13 @@ void HAManager::begin() {
         _config.mqttPass.c_str()
     );
 
+    
     // Subscribe to firmware update topic using device unique ID
-    _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
     //DEBUG_PRINTLN("Subscribing to firmware update topic: " + _firmwareUpdateTopic);
     _mqtt.onMessage(onMessage);
     _mqtt.onConnected([]() {
         _instance->_mqtt.subscribe(_instance->_firmwareUpdateTopic.c_str());
-        DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _instance->_firmwareUpdateTopic);
+        DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _instance->_firmwareUpdateTopic);        
     });
     //_mqtt.subscribe(_firmwareUpdateTopic.c_str());
     //DEBUG_PRINTLN("Subscribed to firmware update topic: " + _firmwareUpdateTopic);
@@ -84,21 +85,36 @@ void HAManager::begin() {
 
 void HAManager::loop() {
     _mqtt.loop();
+    if (!_mqtt.isConnected()) {
+        return;
+    }
+    if (_firstLoop) {
+        String firmwareAttrs = "{\"device_name\": \"" + _config.deviceName + "\", \"firmware_sensor\": \"" + _haDevice.getUniqueId() + "_" + _firmwareVersion.uniqueId() + "\",  \"model\": \"" + String(HW_MODEL) + "\", \"manufacturer\": \"" + String(HW_MANUFACTURER) + "\", \"update\": \"" + _firmwareUpdateTopic + "\"}";
+        _firmwareVersion.setJsonAttributes(firmwareAttrs.c_str());
+        _firmwareVersion.setValue(VERSION);
+        _firstLoop = false;
+    }
+    if (_windowSensor.getCurrentState() != _windowState) {
+        _windowSensor.setState(_windowState, false);
+    }
+
+    if (_batterySensor.getCurrentValue().toFloat() != _batteryVoltage) {
+        _batterySensor.setValue(_batteryVoltage, false);
+        // Default: alkaline (can be made configurable later)
+        float percent = BatteryUtil::voltageToPercent(_batteryVoltage, BatteryType::ALKALINE);
+        _batteryPercent.setValue(percent, false);
+    }
+    _mqtt.loop();
 }
 
 // --- Publishers ---
 
-void HAManager::publishWindow(bool open, bool force) {
-    _windowSensor->setState(open, force);
+void HAManager::setWindowState(bool open) {
+    _windowState = open;
 }
 
-void HAManager::publishBattery(float voltage, bool force) {
-    _batterySensor->setValue(voltage, force);
-
-    // Default: alkaline (can be made configurable later)
-    float percent = BatteryUtil::voltageToPercent(voltage, BatteryType::ALKALINE);
-
-    _batteryPercent->setValue(percent, force);
+void HAManager::setBatteryState(float voltage) {
+    _batteryVoltage = voltage;
 }
 
 void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
