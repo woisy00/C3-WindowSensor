@@ -50,8 +50,8 @@ void loop() {
     //float battery = Hardware::readBattery(config.rTop, config.rBottom);
     haManager.setWindowState(windowOpen);
     haManager.setBatteryState(battery);
+    #endif
     if (millis() >= wakeDeadline) {
         SleepManager::goToSleep(windowOpen, config.sleepTime);
     }
-    #endif
 }

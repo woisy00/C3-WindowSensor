@@ -5,6 +5,14 @@
 #include "Config.h"
 #include "BatteryUtil.h"
 #include "WindowSensorDefines.h"
+#include "BatteryUtil.h"
+#include "version.h"
+#include "Utils.h"
+#include <HTTPUpdate.h>
+#include <ArduinoJson.h>
+#include "WindowSensorDefines.h"
+#include <HADevice.h>
+#include <utils/HASerializer.h>
 
 class HAManager {
 public:
@@ -34,6 +42,9 @@ private:
     bool _windowState;
     float _batteryVoltage;
     String _configUrl;
+
+    void _performUpdate(const String& message);
+    void _publish(const String& topic, const JsonDocument& payload, bool retained = false);
 
     static HAManager* _instance;
 

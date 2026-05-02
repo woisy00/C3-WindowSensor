@@ -1,11 +1,5 @@
 #include "HAManager.h"
-#include "BatteryUtil.h"
-#include "version.h"
-#include "Utils.h"
-#include <HTTPUpdate.h>
-#include <ArduinoJson.h>
-#include "WindowSensorDefines.h"
-#include "UpdateManager.h"
+
 
 HAManager* HAManager::_instance = nullptr;
 
@@ -130,6 +124,83 @@ void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t le
         DEBUG_PRINTLN("Firmware update request received on topic: " + String(topic));
         DEBUG_PRINTLN("Message: " + message);
 
-        UpdateManager::performUpdate(message);
+        _instance->_performUpdate(message);
     }
+}
+
+void HAManager::_performUpdate(const String& message) {
+    // Parse JSON message
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, message);
+    if (error) {
+        DEBUG_PRINTLN("Failed to parse JSON: " + String(error.c_str()));
+        return;
+    }
+    
+    String status = doc["status"];
+    if (status != "requested" && status != "update_started") {
+        DEBUG_PRINTLN("Invalid command in update message");
+        // delete message
+        _mqtt.publish(_firmwareUpdateTopic.c_str(), "", true);
+        return;
+    }
+
+    if (status == "requested" && doc["version"] == VERSION) {
+        DEBUG_PRINTLN("Update already done");
+        // finally "delete" the update request
+        _mqtt.publish(_firmwareUpdateTopic.c_str(), "", true);
+        return;
+    }
+
+    if (doc["url"]) {
+        String firmwareUrl = doc["url"];
+        String version = doc["version"] | "unknown";
+        DEBUG_PRINTLN("Starting firmware update to " + version + " from: " + firmwareUrl);
+
+        JsonDocument payload;
+        payload["installed_version"] = VERSION;
+        payload["latest_version"] = version;
+        payload["title"] = "Firmware update to " + version;
+        payload["in_progress"] = true;
+
+        String payloadStr;
+        serializeJson(payload, payloadStr);
+        _firmwareVersion.setForceUpdate(true);
+        _firmwareVersion.setValue(payloadStr.c_str());
+        _firmwareVersion.setForceUpdate(false);
+
+        // confirm update initiation
+        JsonDocument confirmPayload;
+        confirmPayload["url"] = firmwareUrl;
+        confirmPayload["version"] = version;
+        confirmPayload["status"] = "update_started";          
+        _publish(_firmwareUpdateTopic.c_str(), confirmPayload);
+
+        WiFiClient client;  // or WiFiClientSecure for HTTPS        
+        HTTPUpdate httpUpdate;                
+        
+        HTTPUpdateResult result = httpUpdate.update(client, firmwareUrl);
+        if (result == HTTP_UPDATE_OK) {
+            DEBUG_PRINTLN("Firmware update successful. Restarting...");
+            ESP.restart();
+        } else {
+            DEBUG_PRINTLN("Firmware update failed. Error: " + String(httpUpdate.getLastError()) + " - " + httpUpdate.getLastErrorString());
+            JsonDocument payload;
+            payload["error"] = "Firmware update failed: " + String(httpUpdate.getLastError()) + " - " + httpUpdate.getLastErrorString();
+            _publish(_firmwareUpdateTopic.c_str(), payload); 
+            
+        }
+    } else {
+        DEBUG_PRINTLN("JSON message missing 'url' field");
+
+        JsonDocument payload;
+        payload["error"] = "Missing 'url' field in update message";        
+        _publish(_firmwareUpdateTopic.c_str(), payload);
+    }
+}
+
+void HAManager::_publish(const String& topic, const JsonDocument& payload, bool retained) { 
+    String payloadStr;
+    serializeJson(payload, payloadStr);
+    _mqtt.publish(topic.c_str(), payloadStr.c_str(), retained);
 }
