@@ -34,7 +34,7 @@ private:
     HABinarySensor _windowSensor;
     HASensorNumber _batterySensor;
     HASensorNumber _batteryPercent;
-    HASensor _firmwareVersion;
+    //HASensor _firmwareVersion;
 
     String _firmwareUpdateTopic;
 
@@ -45,7 +45,7 @@ private:
 
     void _performUpdate(const String& message);
     void _publish(const String& topic, const JsonDocument& payload, bool retained = false);
-
+    void _setFirmwareVersion(const char* latestVersion = nullptr, bool progress = false);
     static HAManager* _instance;
 
     static void onMessage(const char* topic, const uint8_t* payload, uint16_t length);

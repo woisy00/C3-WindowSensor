@@ -1,5 +1,6 @@
 #include "HAManager.h"
 
+#define FW_OBJECT_ID "firmware"
 
 HAManager* HAManager::_instance = nullptr;
 
@@ -9,7 +10,7 @@ HAManager::HAManager(Config& cfg)
     : _config(cfg),
       _haDevice(),
       _mqtt(_wifiClient, _haDevice),
-      _firmwareVersion("firmware", HASensor::JsonAttributesFeature),
+      //_firmwareVersion("firmware", HASensor::JsonAttributesFeature),
       _windowSensor("window"),
       _batterySensor("battery_voltage", HASensorNumber::PrecisionP2),
       _batteryPercent("battery_percent", HASensorNumber::PrecisionP0) {
@@ -39,9 +40,9 @@ void HAManager::begin() {
     _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
 
     // Firmware version sensor
-    _firmwareVersion.setName("Firmware version");
+    //_firmwareVersion.setName("Firmware version");
     //_firmwareVersion->setDeviceClass("firmware");
-    _mqtt.addDeviceType(&_firmwareVersion);
+    //_mqtt.addDeviceType(&_firmwareVersion);
     
     // Window sensor
     _windowSensor.setDeviceClass("window");
@@ -75,8 +76,6 @@ void HAManager::begin() {
         _instance->_mqtt.subscribe(_instance->_firmwareUpdateTopic.c_str());
         DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _instance->_firmwareUpdateTopic);        
     });
-    //_mqtt.subscribe(_firmwareUpdateTopic.c_str());
-    //DEBUG_PRINTLN("Subscribed to firmware update topic: " + _firmwareUpdateTopic);
 }
 
 // --- Loop ---
@@ -87,9 +86,7 @@ void HAManager::loop() {
         return;
     }
     if (_firstLoop) {
-        String firmwareAttrs = "{\"device_name\": \"" + _config.deviceName + "\", \"firmware_sensor\": \"" + _haDevice.getUniqueId() + "_" + _firmwareVersion.uniqueId() + "\",  \"model\": \"" + String(HW_MODEL) + "\", \"manufacturer\": \"" + String(HW_MANUFACTURER) + "\", \"update\": \"" + _firmwareUpdateTopic + "\"}";
-        _firmwareVersion.setJsonAttributes(firmwareAttrs.c_str());
-        _firmwareVersion.setValue(VERSION);
+        _setFirmwareVersion();
         _firstLoop = false;
     }
     if (_windowSensor.getCurrentState() != _windowState) {
@@ -103,6 +100,43 @@ void HAManager::loop() {
         _batteryPercent.setValue(percent, false);
     }
     _mqtt.loop();
+}
+
+void HAManager::_setFirmwareVersion(const char* latestVersion, bool progress) {
+
+    const uint16_t topicLength = HASerializer::calculateDataTopicLength(
+        FW_OBJECT_ID,
+        AHATOFSTR(HAStateTopic)
+    );
+    if (topicLength == 0) {
+        return;
+    }
+
+    char fullTopic[topicLength];
+    if (!HASerializer::generateDataTopic(
+        fullTopic,
+        FW_OBJECT_ID,
+        AHATOFSTR(HAStateTopic)
+    )) {
+        return;
+    }
+
+    JsonDocument payload;
+    payload["installed_version"] = VERSION;
+    if (latestVersion){
+        payload["latest_version"] = latestVersion;
+    }
+    payload["title"] = "Window Sensor " + String(VERSION);
+    payload["in_progress"] = progress;
+    payload["device_id"] = _haDevice.getUniqueId();
+    payload["device_name"] = _config.deviceName;
+    payload["model"] = HW_MODEL;
+    payload["manufacturer"] = HW_MANUFACTURER;
+    payload["update_topic"] = _firmwareUpdateTopic;
+
+    _publish(fullTopic, payload, true);
+    DEBUG_PRINTLN("Published firmware version to topic: " + String(fullTopic));
+    DEBUG_PRINTLN("Payload: " + payload.as<String>());
 }
 
 // --- Publishers ---
@@ -156,18 +190,7 @@ void HAManager::_performUpdate(const String& message) {
         String firmwareUrl = doc["url"];
         String version = doc["version"] | "unknown";
         DEBUG_PRINTLN("Starting firmware update to " + version + " from: " + firmwareUrl);
-
-        JsonDocument payload;
-        payload["installed_version"] = VERSION;
-        payload["latest_version"] = version;
-        payload["title"] = "Firmware update to " + version;
-        payload["in_progress"] = true;
-
-        String payloadStr;
-        serializeJson(payload, payloadStr);
-        _firmwareVersion.setForceUpdate(true);
-        _firmwareVersion.setValue(payloadStr.c_str());
-        _firmwareVersion.setForceUpdate(false);
+        _setFirmwareVersion(version.c_str(), true);
 
         // confirm update initiation
         JsonDocument confirmPayload;
@@ -196,11 +219,13 @@ void HAManager::_performUpdate(const String& message) {
         JsonDocument payload;
         payload["error"] = "Missing 'url' field in update message";        
         _publish(_firmwareUpdateTopic.c_str(), payload);
-    }
+    }    
 }
 
 void HAManager::_publish(const String& topic, const JsonDocument& payload, bool retained) { 
     String payloadStr;
     serializeJson(payload, payloadStr);
     _mqtt.publish(topic.c_str(), payloadStr.c_str(), retained);
+    _mqtt.loop();
+    _mqtt.loop();
 }
