@@ -134,7 +134,7 @@ void HAManager::_setFirmwareVersion(const char* latestVersion, bool progress) {
     payload["manufacturer"] = HW_MANUFACTURER;
     payload["update_topic"] = _firmwareUpdateTopic;
 
-    _publish(fullTopic, payload, true);
+    _publish(fullTopic, payload, false);
     DEBUG_PRINTLN("Published firmware version to topic: " + String(fullTopic));
     DEBUG_PRINTLN("Payload: " + payload.as<String>());
 }
