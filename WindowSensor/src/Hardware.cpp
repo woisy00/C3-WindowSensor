@@ -19,13 +19,13 @@ void Hardware::initPins() {
     digitalWrite(PIN_BAT_EN, HIGH);
 }
 
-bool Hardware::readWindowState() {
+Hardware::WindowState Hardware::readWindowState() {
     delay(10); // allow settling
     bool no = digitalRead(PIN_NO);
     //bool nc = digitalRead(PIN_NC);
     DEBUG_PRINTLN("Read window state: " + Utils::boolToString(no));
     // read the NO and NC pins and determine window state
-    return no == LOW; // || nc == HIGH;
+    return no == LOW ? WindowState::OPEN : WindowState::CLOSED; // || nc == HIGH;
 }
 
 float Hardware::readBattery(float rTop, float rBottom) {

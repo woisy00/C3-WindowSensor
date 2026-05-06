@@ -2,8 +2,6 @@
 
 #define FW_OBJECT_ID "firmware"
 
-HAManager* HAManager::_instance = nullptr;
-
 // --- Constructor ---
 
 HAManager::HAManager(Config& cfg)
@@ -14,7 +12,6 @@ HAManager::HAManager(Config& cfg)
       _windowSensor("window"),
       _batterySensor("battery_voltage", HASensorNumber::PrecisionP2),
       _batteryPercent("battery_percent", HASensorNumber::PrecisionP0) {
-    _instance = this;
 }
 
 // --- Setup ---
@@ -71,35 +68,48 @@ void HAManager::begin() {
     
     // Subscribe to firmware update topic using device unique ID
     //DEBUG_PRINTLN("Subscribing to firmware update topic: " + _firmwareUpdateTopic);
-    _mqtt.onMessage(onMessage);
-    _mqtt.onConnected([]() {
-        _instance->_mqtt.subscribe(_instance->_firmwareUpdateTopic.c_str());
-        DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _instance->_firmwareUpdateTopic);        
+    static HAManager* self = this;  // capture 'this' pointer for use in lambda
+    _mqtt.onMessage([](const char* topic, const uint8_t* payload, uint16_t length) {
+        String message;
+        for (uint16_t i = 0; i < length; i++) {
+            message += (char)payload[i];
+        }
+        DEBUG_PRINTLN("Firmware update request received on topic: " + String(topic));
+        DEBUG_PRINTLN("Message: " + message);
+
+        self->_performUpdate(message);
     });
 }
 
 // --- Loop ---
 
-void HAManager::loop() {
-    _mqtt.loop();
-    if (!_mqtt.isConnected()) {
-        return;
-    }
-    if (_firstLoop) {
-        _setFirmwareVersion();
-        _firstLoop = false;
-    }
-    if (_windowSensor.getCurrentState() != _windowState) {
-        _windowSensor.setState(_windowState, false);
+HAManager::WorkResult HAManager::work() {
+    while (!_mqtt.isConnected()) {
+        _mqtt.loop();
+        delay(10);        
     }
 
-    if (_batterySensor.getCurrentValue().toFloat() != _batteryVoltage) {
-        _batterySensor.setValue(_batteryVoltage, false);
-        // Default: alkaline (can be made configurable later)
-        float percent = BatteryUtil::voltageToPercent(_batteryVoltage, BatteryType::ALKALINE);
-        _batteryPercent.setValue(percent, false);
+    _mqtt.subscribe(_firmwareUpdateTopic.c_str());
+    DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _firmwareUpdateTopic);
+
+    _windowState = Hardware::readWindowState();
+    _batteryVoltage = Hardware::readBattery(_config.rTop, _config.rBottom);
+
+    _setFirmwareVersion();
+    _windowSensor.setState(Hardware::toBool(_windowState), false);
+
+    _batterySensor.setValue(_batteryVoltage, false);
+    // Default: alkaline (can be made configurable later)
+    float percent = BatteryUtil::voltageToPercent(_batteryVoltage, BatteryType::ALKALINE);
+    _batteryPercent.setValue(percent, false);
+
+    unsigned long start = millis();
+    while (millis() - start < 600 || _updatingFirmware) {  // usually 100–300ms is enough
+        _mqtt.loop();
+        delay(10);
     }
-    _mqtt.loop();
+    
+    return WorkResult{ true, _windowState };
 }
 
 void HAManager::_setFirmwareVersion(const char* latestVersion) {
@@ -137,28 +147,6 @@ void HAManager::_setFirmwareVersion(const char* latestVersion) {
 }
 
 // --- Publishers ---
-
-void HAManager::setWindowState(bool open) {
-    _windowState = open;
-}
-
-void HAManager::setBatteryState(float voltage) {
-    _batteryVoltage = voltage;
-}
-
-void HAManager::onMessage(const char* topic, const uint8_t* payload, uint16_t length) {
-    if (_instance) {
-        String message;
-        for (uint16_t i = 0; i < length; i++) {
-            message += (char)payload[i];
-        }
-        DEBUG_PRINTLN("Firmware update request received on topic: " + String(topic));
-        DEBUG_PRINTLN("Message: " + message);
-
-        _instance->_performUpdate(message);
-    }
-}
-
 void HAManager::_performUpdate(const String& message) {
     // Parse JSON message
     JsonDocument doc;
