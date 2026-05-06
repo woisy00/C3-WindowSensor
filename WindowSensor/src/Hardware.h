@@ -18,9 +18,8 @@ public:
     static constexpr int PIN_NO = 1;
     static constexpr int PIN_NC = 2;
     static constexpr int PIN_BAT_ADC = 4;
-    static constexpr int PIN_BAT_EN = 3;
     static constexpr int PIN_BUTTON = 5;
-    static constexpr int BATTERY_SAMPLES = 5;
+    static constexpr int BATTERY_SAMPLES = 3;
 
     static void initPins();
     static WindowState readWindowState();

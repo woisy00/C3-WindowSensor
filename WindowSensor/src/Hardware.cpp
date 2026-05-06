@@ -14,9 +14,6 @@ void Hardware::initPins() {
     // setting it explicitly avoids accidental digital writes
     pinMode(PIN_BAT_ADC, INPUT);
     pinMode(PIN_BUTTON, INPUT_PULLUP);
-    // battery enable pin
-    pinMode(PIN_BAT_EN, OUTPUT);
-    digitalWrite(PIN_BAT_EN, HIGH);
 }
 
 Hardware::WindowState Hardware::readWindowState() {
@@ -40,19 +37,14 @@ float Hardware::readBattery(float rTop, float rBottom) {
         &adc_chars
     );
 
-
-    // enable battery reading
-    digitalWrite(PIN_BAT_EN, LOW);
-    delay(50); // allow settling
-
     // discard first sample
     analogRead(PIN_BAT_ADC);
-    delay(10);
+    delayMicroseconds(200);
 
     uint32_t sum = 0;
     for (int i = 0; i < BATTERY_SAMPLES; i++) {
         sum += analogRead(PIN_BAT_ADC);
-        delay(2);
+        delayMicroseconds(200);
     }
 
     uint16_t raw = sum / BATTERY_SAMPLES;
