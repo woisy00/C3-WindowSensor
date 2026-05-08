@@ -1,19 +1,40 @@
 #pragma once
 
 #include <Arduino.h>
-
+#include "WindowSensorDefines.h"
 class Hardware {
 public:
 
-    enum class WindowState : uint8_t {
-        OPEN = 2,    // PIN_NO
-        CLOSED = 1   // PIN_NC
-    };
+    struct WindowState {
+        bool no;
+        bool nc;
 
-    // helper to convert window state to boolean if needed
-    static constexpr bool toBool(WindowState state) {
-        return state == WindowState::OPEN;
-    }
+        int wakePin() const {
+            if (no == LOW) {
+                return PIN_NC;
+            } else if (nc == LOW) {
+                return PIN_NO;
+            } else {
+                // Both HIGH - should not happen with SPDT, default to CLOSED or handle error
+                DEBUG_PRINTLN("Warning: Both NO and NC are HIGH - possible wiring issue");
+                return PIN_NC; // default to closed
+            }
+        }
+
+        bool isOpen() const {
+            // read the NO and NC pins and determine window state
+            // Assuming SPDT switch: when closed, NO is LOW, NC is HIGH; when open, NO is HIGH, NC is LOW
+            if (no == LOW) {
+                return true;
+            } else if (nc == LOW) {
+                return false;
+            } else {
+                // Both HIGH - should not happen with SPDT, default to CLOSED or handle error
+                DEBUG_PRINTLN("Warning: Both NO and NC are HIGH - possible wiring issue");
+                return false;
+            }            
+        }
+    };
 
     static constexpr int PIN_NO = 2;
     static constexpr int PIN_NC = 1;

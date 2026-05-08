@@ -42,7 +42,7 @@ bool Config::load() {
     DEBUG_PRINTLN("  rTop (kΩ): " + String(rTop));
     DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
 
-    return mqttHost.length() > 0;
+    return mqttHost.length() > 0 && deviceName != "window-sensor";
 }
 
 void Config::save() {
@@ -88,6 +88,8 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     // use number inputs so only digits/decimal allowed
     _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
+
+    wm.setParamsPage(true);
 
     // add them in grouped order
     wm.addParameter(_p_group_general);

@@ -33,7 +33,6 @@ void setup() {
 void loop() {
     auto result = haManager.work();
     if (result.success) {
-        uint8_t pin = static_cast<uint8_t>(result.windowState);
-        SleepManager::goToSleep(pin, config.sleepTime);
+        SleepManager::goToSleep(result.windowState.wakePin(), config.sleepTime);
     }
 }

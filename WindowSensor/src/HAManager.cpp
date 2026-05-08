@@ -96,7 +96,15 @@ HAManager::WorkResult HAManager::work() {
     _batteryVoltage = Hardware::readBattery(_config.rTop, _config.rBottom);
 
     _setFirmwareVersion();
-    _windowSensor.setState(Hardware::toBool(_windowState), false);
+    _windowSensor.setState(_windowState.isOpen(), false);
+
+    #ifdef DEBUG
+        JsonDocument debugInfo;
+        debugInfo["pin_no"] = _windowState.no;
+        debugInfo["pin_nc"] = _windowState.nc;
+
+        _publish("debug", debugInfo, false);
+    #endif
 
     _batterySensor.setValue(_batteryVoltage, false);
     // Default: alkaline (can be made configurable later)

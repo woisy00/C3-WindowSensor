@@ -40,6 +40,7 @@ void WiFiConnector::connect(bool forceConfig) {
         DEBUG_PRINTLN("WiFi failed... starting captive portal");
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
+        _wm.setSaveParamsCallback(WiFiConnector::saveConfigCallback);
         _wm.startConfigPortal("Window-Sensor");
     } else if (forceConfig) {
         WiFi.hostname(_config.deviceName);
@@ -48,6 +49,7 @@ void WiFiConnector::connect(bool forceConfig) {
         rebootRequested = true;
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
+        _wm.setSaveParamsCallback(WiFiConnector::saveConfigCallback);
         _wm.startWebPortal();
         DEBUG_PRINTLN("Portal running");
         while (_wm.getWebPortalActive()) {
