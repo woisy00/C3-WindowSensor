@@ -6,8 +6,8 @@ class Hardware {
 public:
 
     enum class WindowState : uint8_t {
-        OPEN = 2,    // PIN_NC
-        CLOSED = 1   // PIN_NO
+        OPEN = 2,    // PIN_NO
+        CLOSED = 1   // PIN_NC
     };
 
     // helper to convert window state to boolean if needed
@@ -15,8 +15,8 @@ public:
         return state == WindowState::OPEN;
     }
 
-    static constexpr int PIN_NO = 1;
-    static constexpr int PIN_NC = 2;
+    static constexpr int PIN_NO = 2;
+    static constexpr int PIN_NC = 1;
     static constexpr int PIN_BAT_ADC = 4;
     static constexpr int PIN_BUTTON = 5;
     static constexpr int BATTERY_SAMPLES = 3;

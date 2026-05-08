@@ -1,12 +1,16 @@
 #include "Hardware.h"
 #include "Utils.h"
 #include <Arduino.h>
+#include "driver/gpio.h"
 #include "esp_adc_cal.h"
 #include "WindowSensorDefines.h"
 
 esp_adc_cal_characteristics_t adc_chars;
 
 void Hardware::initPins() {
+    // Release GPIO hold after deep sleep wake-up
+    gpio_hold_dis((gpio_num_t)PIN_NO);
+    gpio_hold_dis((gpio_num_t)PIN_NC);
     // reed switch inputs
     pinMode(PIN_NO, INPUT);
     pinMode(PIN_NC, INPUT);
@@ -17,12 +21,21 @@ void Hardware::initPins() {
 }
 
 Hardware::WindowState Hardware::readWindowState() {
-    delay(10); // allow settling
+    delay(10); // allow settling - reduced back since GPIO hold prevents floating after deep sleep
     bool no = digitalRead(PIN_NO);
-    //bool nc = digitalRead(PIN_NC);
-    DEBUG_PRINTLN("Read window state: " + Utils::boolToString(no));
+    bool nc = digitalRead(PIN_NC);
+    DEBUG_PRINTLN("Read window state: NO=" + Utils::boolToString(no) + ", NC=" + Utils::boolToString(nc));
     // read the NO and NC pins and determine window state
-    return no == LOW ? WindowState::OPEN : WindowState::CLOSED; // || nc == HIGH;
+    // Assuming SPDT switch: when closed, NO is LOW, NC is HIGH; when open, NO is HIGH, NC is LOW
+    if (no == LOW) {
+        return WindowState::CLOSED;
+    } else if (nc == LOW) {
+        return WindowState::OPEN;
+    } else {
+        // Both HIGH - should not happen with SPDT, default to CLOSED or handle error
+        DEBUG_PRINTLN("Warning: Both NO and NC are HIGH - possible wiring issue");
+        return WindowState::CLOSED;
+    }
 }
 
 float Hardware::readBattery(float rTop, float rBottom) {
