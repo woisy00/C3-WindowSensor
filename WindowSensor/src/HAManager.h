@@ -6,6 +6,7 @@
 #include "BatteryUtil.h"
 #include "WindowSensorDefines.h"
 #include "BatteryUtil.h"
+#include "Hardware.h"
 #include "version.h"
 #include "Utils.h"
 #include <HTTPUpdate.h>
@@ -17,12 +18,16 @@
 class HAManager {
 public:
     explicit HAManager(Config& cfg);
+    struct WorkResult
+    {
+        bool success;
+        Hardware::WindowState windowState;
+    };
 
     void begin();
-    void loop();
+    WorkResult work();
 
-    void setWindowState(bool open);
-    void setBatteryState(float voltage);
+    
 
 private:
     Config& _config;
@@ -38,15 +43,13 @@ private:
 
     String _firmwareUpdateTopic;
 
-    bool _firstLoop = true;
-    bool _windowState;
-    float _batteryVoltage;
+    Hardware::WindowState _windowState;
+    bool _updatingFirmware = false;
+    float _batteryVoltage;  
     String _configUrl;
 
     void _performUpdate(const String& message);
     void _publish(const String& topic, const JsonDocument& payload, bool retained = false);
-    void _setFirmwareVersion(const char* latestVersion = nullptr, bool progress = false);
-    static HAManager* _instance;
+    void _setFirmwareVersion(const char* latestVersion = nullptr);
 
-    static void onMessage(const char* topic, const uint8_t* payload, uint16_t length);
 };

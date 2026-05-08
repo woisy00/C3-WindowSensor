@@ -14,10 +14,6 @@ Config config;
 WiFiConnector wifiConnector(config);
 HAManager haManager(config);
 
-bool windowOpen = false;
-unsigned long wakeDeadline = 0;
-float battery = 0.0;
-
 void setup() {
     DEBUG_INIT();
 
@@ -32,26 +28,11 @@ void setup() {
     wifiConnector.connect(!configExists || portalRequested);
 
     haManager.begin();    
-
-    windowOpen = Hardware::readWindowState();
-    battery = Hardware::readBattery(config.rTop, config.rBottom);
-
-    haManager.setWindowState(windowOpen);
-    haManager.setBatteryState(battery);
-
-    wakeDeadline = millis() + config.loopTime;
 }
 
 void loop() {
-    haManager.loop();
-
-    #ifndef DEBUG
-    windowOpen = Hardware::readWindowState();
-    //float battery = Hardware::readBattery(config.rTop, config.rBottom);
-    haManager.setWindowState(windowOpen);
-    haManager.setBatteryState(battery);
-    #endif
-    if (millis() >= wakeDeadline) {
-        SleepManager::goToSleep(windowOpen, config.sleepTime);
+    auto result = haManager.work();
+    if (result.success) {
+        SleepManager::goToSleep(result.windowState.wakePin(), config.sleepTime);
     }
 }

@@ -1,6 +1,6 @@
 // #define DEBUG
 // #define ARDUINOHA_DEBUG
-
+// #define VERSION "v1.0.199"
 
 #if defined(DEBUG)
     #include <Arduino.h>

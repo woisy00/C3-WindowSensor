@@ -1,6 +1,7 @@
 #include "Hardware.h"
 #include "Utils.h"
 #include <Arduino.h>
+#include "driver/gpio.h"
 #include "esp_adc_cal.h"
 #include "WindowSensorDefines.h"
 
@@ -10,22 +11,22 @@ void Hardware::initPins() {
     // reed switch inputs
     pinMode(PIN_NO, INPUT);
     pinMode(PIN_NC, INPUT);
+    // disable internal pullups
+    gpio_pullup_dis((gpio_num_t)PIN_NO);
+    gpio_pullup_dis((gpio_num_t)PIN_NC);
+
     // battery ADC pin doesn't need mode for analogRead, but
     // setting it explicitly avoids accidental digital writes
     pinMode(PIN_BAT_ADC, INPUT);
     pinMode(PIN_BUTTON, INPUT_PULLUP);
-    // battery enable pin
-    pinMode(PIN_BAT_EN, OUTPUT);
-    digitalWrite(PIN_BAT_EN, HIGH);
 }
 
-bool Hardware::readWindowState() {
-    delay(10); // allow settling
+Hardware::WindowState Hardware::readWindowState() {
+    delay(100); // allow settling - reduced back since GPIO hold prevents floating after deep sleep
     bool no = digitalRead(PIN_NO);
-    //bool nc = digitalRead(PIN_NC);
-    DEBUG_PRINTLN("Read window state: " + Utils::boolToString(no));
-    // read the NO and NC pins and determine window state
-    return no == LOW; // || nc == HIGH;
+    bool nc = digitalRead(PIN_NC);
+    DEBUG_PRINTLN("Read window state: NO=" + Utils::boolToString(no) + ", NC=" + Utils::boolToString(nc));
+    return WindowState{ no, nc };
 }
 
 float Hardware::readBattery(float rTop, float rBottom) {
@@ -40,19 +41,14 @@ float Hardware::readBattery(float rTop, float rBottom) {
         &adc_chars
     );
 
-
-    // enable battery reading
-    digitalWrite(PIN_BAT_EN, LOW);
-    delay(50); // allow settling
-
     // discard first sample
     analogRead(PIN_BAT_ADC);
-    delay(10);
+    delayMicroseconds(200);
 
     uint32_t sum = 0;
     for (int i = 0; i < BATTERY_SAMPLES; i++) {
         sum += analogRead(PIN_BAT_ADC);
-        delay(2);
+        delayMicroseconds(200);
     }
 
     uint16_t raw = sum / BATTERY_SAMPLES;

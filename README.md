@@ -120,14 +120,234 @@ The device stores the URL so it can download on the next wake.
 
 ## 🏠 Home Assistant Integration
 
-Discovery is automatic via ArduinoHA; the sensor appears as:
+Discovery is automatic via ArduinoHA; the sensor appears as a device with the following entities:
 
+- **binary_sensor.window** – Window/door state (OPEN/CLOSED)
+- **sensor.battery_voltage** – Battery voltage in volts (V)
+- **sensor.battery_percent** – Battery level in percentage (%)
+
+The device name is configurable via the Wi-Fi portal and will appear in Home Assistant with that name.
+
+### Manual Configuration (Optional)
+
+If auto-discovery fails, you can manually add the sensor in your `configuration.yaml`:
+
+```yaml
+mqtt:
+  binary_sensor:
+    - name: "Window Sensor"
+      state_topic: "aha/<device_id>/window/stat_t"
+      payload_on: "OPEN"
+      payload_off: "CLOSED"
+      device_class: window
+      availability_topic: "aha/<device_id>/avty_t"
+      payload_available: "online"
+      payload_not_available: "offline"
+
+  sensor:
+    - name: "Battery Voltage"
+      state_topic: "aha/<device_id>/battery"
+      unit_of_measurement: "V"
+      device_class: voltage
+      availability_topic: "aha/<device_id>/avty_t"
+      payload_available: "online"
+      payload_not_available: "offline"
+
+    - name: "Battery Percent"
+      state_topic: "aha/<device_id>/battery_percent"
+      unit_of_measurement: "%"
+      device_class: battery
+      availability_topic: "aha/<device_id>/avty_t"
+      payload_available: "online"
+      payload_not_available: "offline"
 ```
-WindowSensorParentsSmall
- ├─ binary_sensor.window
- ├─ sensor.battery
- └─ sensor.firmware
+
+Replace `<device_id>` with your device's unique ID (ESP32 MAC address).
+
+---
+
+## 🤖 Home Assistant Automations
+
+The repository includes several Home Assistant automations for firmware management and updates. These can be found in the root directory as YAML files. Below are the key automations with their configurations.
+
+### Firmware Update Automations
+
+#### 1. Auto-create Firmware Update Entities (`autocreate-update-entites.yaml`)
+
+This automation automatically creates firmware update entities in Home Assistant when a device publishes its firmware status via MQTT.
+
+```yaml
+alias: Auto-create firmware update entities
+description: ""
+triggers:
+  - trigger: mqtt
+    options:
+      topic: aha/+/firmware/stat_t
+      value_template: "{{ value_json }}"
+conditions: []
+actions:
+  - variables:
+      device_id: "{{ trigger.payload_json['device_id'] }}"
+      state_topic: aha/{{ trigger.payload_json['device_id'] }}/firmware_version/stat_t
+      update_topic: "{{ trigger.payload_json['update_topic'] }}"
+      model: "{{ trigger.payload_json['model'] }}"
+      manufacturer: "{{ trigger.payload_json['manufacturer'] }}"
+      in_progress: "{{ trigger.payload_json['in_progress'] }}"
+      installed_version: "{{ trigger.payload_json['installed_version'] }}"
+      latest_version: "{{ trigger.payload_json['latest_version'] }}"
+      install_payload_tpl: |
+        {{
+          {
+            'device_id': device_id ,
+            'model': model,
+            'update_topic': update_topic,
+            'state_topic': state_topic
+          } | tojson | replace('"', '\\"')
+        }}  
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json['in_progress'] == false }}"
+    then:
+      - data:
+          topic: homeassistant/update/{{ device_id }}/firmware/config
+          retain: true
+          payload: |
+            {
+              "name": "Firmware Update",
+              "unique_id": "{{ device_id }}_fw_update",
+
+              "state_topic": "{{ state_topic }}",
+
+              "latest_version_topic": "aha/firmware-server/{{model}}/stat_t",
+              "latest_version_template": "{{ '{{ value }}' }}",
+
+              "command_topic": "aha/firmware-server/update_device",
+              "payload_install": "{{ install_payload_tpl }}",
+
+              "device": {
+                "identifiers": "{{ device_id }}"
+              }
+            }
+        action: mqtt.publish
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      topic: "{{ state_topic }}"
+      payload: |-
+        {
+          "installed_version": "{{ installed_version }}",
+          "in_progress": {{ (in_progress)|lower }}
+        }
+mode: queued
 ```
+
+#### 2. Update Window Sensors (`update-window-sensors.yaml`)
+
+This automation triggers firmware updates for window sensors when a command is received via MQTT.
+
+```yaml
+alias: Update Window Sensors
+description: ""
+triggers:
+  - trigger: mqtt
+    options:
+      topic: aha/firmware-server/update_device
+conditions: []
+actions:
+  - variables:
+      device_id: "{{ trigger.payload_json['device_id'] }}"
+      update_topic: "{{ trigger.payload_json['update_topic'] }}"
+      state_topic: "{{ trigger.payload_json['state_topic'] }}"
+      model: "{{ trigger.payload_json['model'] }}"
+      model_identifier: "{{ trigger.payload_json['model'] | lower | replace('-', '_') }}"
+      version: >-
+        {{ states('sensor.firmware_server_' ~ model_identifier ~
+        '_firmware_version') }}
+      url: >-
+        {{ state_attr('sensor.firmware_server_' ~ model_identifier ~
+        '_firmware_version','url') }}
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      topic: "{{ update_topic }}"
+      payload: |
+        {
+          "url": "{{ url }}",
+          "version": "{{ version }}",
+          "status": "requested"  
+        }
+      retain: true
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      qos: 0
+      retain: false
+      topic: "{{ state_topic }}"
+      payload: |-
+        {
+          "in_progress": true
+        }
+mode: single
+```
+
+#### 3. Load New Firmware Releases (`load-new-firmware.yaml`)
+
+This automation runs daily to check for and load new firmware releases from a remote server.
+
+```yaml
+alias: Load Window Sensor Firmware releases
+description: ""
+triggers:
+  - trigger: time_pattern
+    hours: "1"
+conditions: []
+actions:
+  - action: ssh.execute_command
+    metadata: {}
+    target:
+      device_id: 9b937fc9ad72259fef5f89c240635546
+    data:
+      command: /home/homeassistant/firmware-server/window-sensor-firmware.sh
+mode: single
+```
+
+### Additional Sensor Automations
+
+In addition to firmware management, you can create custom automations for the window sensor itself. Here are some examples:
+
+#### Window Opened Notification
+
+```yaml
+automation:
+  - alias: "Window Opened Notification"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.window
+        to: "on"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Window has been opened!"
+          title: "Window Alert"
+```
+
+#### Low Battery Warning
+
+```yaml
+automation:
+  - alias: "Window Sensor Low Battery"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.battery_percent
+        below: 20
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Window sensor battery is low: {{ states('sensor.battery_percent') }}%"
+          title: "Battery Alert"
+```
+
+To use these automations, copy the YAML content into your Home Assistant `automations.yaml` file or import the provided YAML files. Adjust entity IDs and device references to match your setup.
 
 ---
 
