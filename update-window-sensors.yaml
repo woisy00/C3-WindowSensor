@@ -1,0 +1,42 @@
+alias: Update Window Sensors
+description: ""
+triggers:
+  - trigger: mqtt
+    options:
+      topic: aha/firmware-server/update_device
+conditions: []
+actions:
+  - variables:
+      device_id: "{{ trigger.payload_json['device_id'] }}"
+      update_topic: "{{ trigger.payload_json['update_topic'] }}"
+      state_topic: "{{ trigger.payload_json['state_topic'] }}"
+      model: "{{ trigger.payload_json['model'] }}"
+      model_identifier: "{{ trigger.payload_json['model'] | lower | replace('-', '_') }}"
+      version: >-
+        {{ states('sensor.firmware_server_' ~ model_identifier ~
+        '_firmware_version') }}
+      url: >-
+        {{ state_attr('sensor.firmware_server_' ~ model_identifier ~
+        '_firmware_version','url') }}
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      topic: "{{ update_topic }}"
+      payload: |
+        {
+          "url": "{{ url }}",
+          "version": "{{ version }}",
+          "status": "requested"  
+        }
+      retain: true
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      qos: 0
+      retain: false
+      topic: "{{ state_topic }}"
+      payload: |-
+        {
+          "in_progress": true
+        }
+mode: single
