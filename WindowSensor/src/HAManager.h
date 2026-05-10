@@ -18,16 +18,8 @@
 class HAManager {
 public:
     explicit HAManager(Config& cfg);
-    struct WorkResult
-    {
-        bool success;
-        Hardware::WindowState windowState;
-    };
-
     void begin();
-    WorkResult work();
-
-    
+    void work();    
 
 private:
     Config& _config;
@@ -39,13 +31,10 @@ private:
     HABinarySensor _windowSensor;
     HASensorNumber _batterySensor;
     HASensorNumber _batteryPercent;
-    //HASensor _firmwareVersion;
 
     String _firmwareUpdateTopic;
 
-    Hardware::WindowState _windowState;
     bool _updatingFirmware = false;
-    float _batteryVoltage;  
     String _configUrl;
 
     void _performUpdate(const String& message);

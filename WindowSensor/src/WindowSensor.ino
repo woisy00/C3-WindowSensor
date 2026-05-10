@@ -13,9 +13,14 @@
 Config config;
 WiFiConnector wifiConnector(config);
 HAManager haManager(config);
+SleepManager sleepManager(config);
 
 void setup() {
     DEBUG_INIT();
+
+    DEBUG_PRINTLN("Starting Window Sensor " + String(VERSION));
+    esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+    DEBUG_PRINTLN("Wakeup cause: " + Utils::wakeupCauseToString(wakeup_cause));
 
     Hardware::initPins();
 
@@ -31,8 +36,6 @@ void setup() {
 }
 
 void loop() {
-    auto result = haManager.work();
-    if (result.success) {
-        SleepManager::goToSleep(result.windowState.wakePin(), config.sleepTime);
-    }
+    haManager.work();
+    sleepManager.goToSleep();
 }
