@@ -7,16 +7,23 @@
 
 SleepManager::SleepManager(Config& cfg) : _config(cfg) {}
 
-void SleepManager::setupWake() {
-    int no = Hardware::readPin(Hardware::PIN_NO);
-    int nc = Hardware::readPin(Hardware::PIN_NC);
+
+void SleepManager::goToSleep(Hardware::WindowState windowState) {
+    Hardware::WindowState currentState = Hardware::readWindowState(); // read again to ensure we have the latest state before sleeping
+       
+    // Only proceed with sleep if the current state matches the expected state
+    if (!currentState.matches(windowState)) {
+        DEBUG_PRINTLN("State mismatch: expected " + String(windowState.isOpen()) + " but got " + String(currentState.isOpen()) + ". Skipping sleep.");
+        return;
+    }
+    
     unsigned long sleepTime = _config.sleepTime;
 
-    if (no == LOW && nc == HIGH) {
+    if (currentState.no == LOW && currentState.nc == HIGH) {
         // Window is closed, wake on NO pin
         DEBUG_PRINTLN("Window is closed, setting wake on NC pin");
         esp_deep_sleep_enable_gpio_wakeup((1ULL << Hardware::PIN_NC), ESP_GPIO_WAKEUP_GPIO_LOW);
-    } else if (no == HIGH && nc == LOW) {
+    } else if (currentState.no == HIGH && currentState.nc == LOW) {
         // Window is open, wake on NC pin
         DEBUG_PRINTLN("Window is open, setting wake on NO pin");
         esp_deep_sleep_enable_gpio_wakeup((1ULL << Hardware::PIN_NO), ESP_GPIO_WAKEUP_GPIO_LOW);
@@ -30,10 +37,7 @@ void SleepManager::setupWake() {
         DEBUG_PRINTLN("Setting wake timer to " + Utils::millisToHuman(sleepTime));
         esp_sleep_enable_timer_wakeup(sleepTime * 1000ULL);
     }
-}
 
-void SleepManager::goToSleep() {
-    setupWake();
-    delay(200);
+    delay(50);    
     esp_deep_sleep_start();
 }

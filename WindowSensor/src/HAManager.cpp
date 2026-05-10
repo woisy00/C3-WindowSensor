@@ -77,7 +77,7 @@ void HAManager::begin() {
 
 // --- Loop ---
 
-void HAManager::work() {
+Hardware::WindowState HAManager::work() {
     while (!_mqtt.isConnected()) {
         _mqtt.loop();
         delay(10);        
@@ -110,6 +110,8 @@ void HAManager::work() {
         _mqtt.loop();
         delay(10);
     }
+
+    return windowState;
 }
 
 void HAManager::_setFirmwareVersion(const char* latestVersion) {

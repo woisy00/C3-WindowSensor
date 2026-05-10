@@ -36,6 +36,6 @@ void setup() {
 }
 
 void loop() {
-    haManager.work();
-    sleepManager.goToSleep();
+    Hardware::WindowState windowState = haManager.work();
+    sleepManager.goToSleep(windowState);
 }

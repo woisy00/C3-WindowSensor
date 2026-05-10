@@ -7,8 +7,8 @@ public:
 
     struct WindowState {
         // low -> false, high -> true
-        bool no; // low -> window closed, high -> window open
-        bool nc; // low -> window open, high -> window closed
+        int no; // low -> window closed, high -> window open
+        int nc; // low -> window open, high -> window closed
 
         int wakePin() const {
             if (no) {
@@ -34,6 +34,10 @@ public:
                 DEBUG_PRINTLN("Warning: Both NO and NC are HIGH - possible wiring issue");
                 return true;
             }            
+        }
+
+        bool matches(const WindowState& other) const {
+            return no == other.no && nc == other.nc;
         }
     };
 

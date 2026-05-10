@@ -19,7 +19,7 @@ class HAManager {
 public:
     explicit HAManager(Config& cfg);
     void begin();
-    void work();    
+    Hardware::WindowState work();    
 
 private:
     Config& _config;
