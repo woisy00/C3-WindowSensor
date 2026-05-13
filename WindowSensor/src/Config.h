@@ -11,7 +11,6 @@ public:
     String mqttUser;
     String mqttPass;
     unsigned long sleepTime;
-    unsigned long loopTime;
     float rTop;
     float rBottom;
 
@@ -31,7 +30,6 @@ private:
     WiFiManagerParameter* _p_user;
     WiFiManagerParameter* _p_pass;
     WiFiManagerParameter* _p_sleep_time;
-    WiFiManagerParameter* _p_loop_time;
     WiFiManagerParameter* _p_rTop;
     WiFiManagerParameter* _p_rBottom;
 
