@@ -41,7 +41,15 @@ void WiFiConnector::connect(bool forceConfig) {
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
         _wm.setSaveParamsCallback(WiFiConnector::saveConfigCallback);
-        _wm.startConfigPortal("Window-Sensor");
+        byte mac[6];
+        WiFi.macAddress(mac);
+
+        // Create default device name with MAC address suffix
+        char macStr[13]; // "AABBCCDDEEFF"
+        snprintf(macStr, sizeof(macStr), "%02X%02X%02X%02X%02X%02X", 
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        String apName = "Window-Wensor-" + String(macStr).substring(6); // Last 4 chars of MAC
+        _wm.startConfigPortal(apName.c_str());
     } else if (forceConfig) {
         WiFi.hostname(_config.deviceName);
         _wm.setHostname(_config.deviceName);
