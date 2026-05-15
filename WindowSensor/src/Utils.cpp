@@ -41,3 +41,22 @@ String Utils::millisToHuman(unsigned long ms) {
 String Utils::boolToString(bool b) {
     return b ? "true" : "false";
 }
+
+String Utils::wakeupCauseToString(esp_sleep_wakeup_cause_t cause) {
+    switch(cause) {
+        case ESP_SLEEP_WAKEUP_UNDEFINED: return "UNDEFINED";
+        case ESP_SLEEP_WAKEUP_ALL: return "ALL";
+        case ESP_SLEEP_WAKEUP_EXT0: return "EXT0";
+        case ESP_SLEEP_WAKEUP_EXT1: return "EXT1";
+        case ESP_SLEEP_WAKEUP_TIMER: return "TIMER";
+        case ESP_SLEEP_WAKEUP_TOUCHPAD: return "TOUCHPAD";
+        case ESP_SLEEP_WAKEUP_ULP: return "ULP";
+        case ESP_SLEEP_WAKEUP_GPIO: return "GPIO";
+        case ESP_SLEEP_WAKEUP_UART: return "UART";
+        case ESP_SLEEP_WAKEUP_WIFI: return "WIFI";
+        case ESP_SLEEP_WAKEUP_COCPU: return "COCPU";
+        case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG: return "COCPU_TRAP_TRIG";
+        case ESP_SLEEP_WAKEUP_BT: return "BT";
+        default: return "UNKNOWN";
+    }
+}

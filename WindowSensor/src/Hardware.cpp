@@ -14,19 +14,54 @@ void Hardware::initPins() {
     // disable internal pullups
     gpio_pullup_dis((gpio_num_t)PIN_NO);
     gpio_pullup_dis((gpio_num_t)PIN_NC);
+    gpio_pulldown_dis((gpio_num_t)PIN_NO);
+    gpio_pulldown_dis((gpio_num_t)PIN_NC);    
 
     // battery ADC pin doesn't need mode for analogRead, but
     // setting it explicitly avoids accidental digital writes
     pinMode(PIN_BAT_ADC, INPUT);
     pinMode(PIN_BUTTON, INPUT_PULLUP);
+
+    delay(50); // allow time for GPIO states to stabilize after power-up
+
 }
 
 Hardware::WindowState Hardware::readWindowState() {
     delay(100); // allow settling - reduced back since GPIO hold prevents floating after deep sleep
-    bool no = digitalRead(PIN_NO);
-    bool nc = digitalRead(PIN_NC);
+    bool no = readDebouncedPin(PIN_NO);
+    bool nc = readDebouncedPin(PIN_NC);
     DEBUG_PRINTLN("Read window state: NO=" + Utils::boolToString(no) + ", NC=" + Utils::boolToString(nc));
     return WindowState{ no, nc };
+}
+
+int Hardware::readPin(int pin) {
+    return readDebouncedPin(pin);
+}
+
+int Hardware::readDebouncedPin(int pin) {
+    // Read pin multiple times and return stable value
+    int lastValue = digitalRead(pin);
+    int stableCount = 1;
+    
+    for (int i = 0; i < DEBOUNCE_SAMPLES - 1; i++) {
+        delay(DEBOUNCE_DELAY_MS);
+        int currentValue = digitalRead(pin);
+        
+        if (currentValue == lastValue) {
+            stableCount++;
+        } else {
+            // State changed, reset counter
+            lastValue = currentValue;
+            stableCount = 1;
+        }
+        
+        // If we have enough consecutive stable reads, return the value
+        if (stableCount >= DEBOUNCE_SAMPLES) {
+            return lastValue;
+        }
+    }
+    
+    return lastValue;
 }
 
 float Hardware::readBattery(float rTop, float rBottom) {

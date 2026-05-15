@@ -1,9 +1,14 @@
 #pragma once
 
 #include <Arduino.h>
+#include "Config.h"
+#include "Hardware.h"
 
 class SleepManager {
 public:
-    static void setupWake(uint8_t pin, unsigned long sleepTime);
-    static void goToSleep(uint8_t pin, unsigned long sleepTime);
+    explicit SleepManager(Config& cfg);
+    
+    void goToSleep(Hardware::WindowState windowState);
+private:
+    Config& _config;
 };

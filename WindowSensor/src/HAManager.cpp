@@ -8,7 +8,6 @@ HAManager::HAManager(Config& cfg)
     : _config(cfg),
       _haDevice(),
       _mqtt(_wifiClient, _haDevice),
-      //_firmwareVersion("firmware", HASensor::JsonAttributesFeature),
       _windowSensor("window"),
       _batterySensor("battery_voltage", HASensorNumber::PrecisionP2),
       _batteryPercent("battery_percent", HASensorNumber::PrecisionP0) {
@@ -36,11 +35,6 @@ void HAManager::begin() {
     // Create unique IDs
     _firmwareUpdateTopic = String("aha/sensor/") + _haDevice.getUniqueId() + "/firmware/update";
 
-    // Firmware version sensor
-    //_firmwareVersion.setName("Firmware version");
-    //_firmwareVersion->setDeviceClass("firmware");
-    //_mqtt.addDeviceType(&_firmwareVersion);
-    
     // Window sensor
     _windowSensor.setDeviceClass("window");
     _windowSensor.setName("Window Sensor");
@@ -83,7 +77,7 @@ void HAManager::begin() {
 
 // --- Loop ---
 
-HAManager::WorkResult HAManager::work() {
+Hardware::WindowState HAManager::work() {
     while (!_mqtt.isConnected()) {
         _mqtt.loop();
         delay(10);        
@@ -92,32 +86,32 @@ HAManager::WorkResult HAManager::work() {
     _mqtt.subscribe(_firmwareUpdateTopic.c_str());
     DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _firmwareUpdateTopic);
 
-    _windowState = Hardware::readWindowState();
-    _batteryVoltage = Hardware::readBattery(_config.rTop, _config.rBottom);
+    Hardware::WindowState windowState = Hardware::readWindowState();
+    float batteryVoltage = Hardware::readBattery(_config.rTop, _config.rBottom);
 
     _setFirmwareVersion();
-    _windowSensor.setState(_windowState.isOpen(), false);
+    _windowSensor.setState(windowState.isOpen(), false);
 
     #ifdef DEBUG
         JsonDocument debugInfo;
-        debugInfo["pin_no"] = _windowState.no;
-        debugInfo["pin_nc"] = _windowState.nc;
+        debugInfo["pin_no"] = windowState.no;
+        debugInfo["pin_nc"] = windowState.nc;
 
         _publish("debug", debugInfo, false);
     #endif
 
-    _batterySensor.setValue(_batteryVoltage, false);
+    _batterySensor.setValue(batteryVoltage, false);
     // Default: alkaline (can be made configurable later)
-    float percent = BatteryUtil::voltageToPercent(_batteryVoltage, BatteryType::ALKALINE);
+    float percent = BatteryUtil::voltageToPercent(batteryVoltage, BatteryType::ALKALINE);
     _batteryPercent.setValue(percent, false);
 
     unsigned long start = millis();
-    while (millis() - start < 600 || _updatingFirmware) {  // usually 100–300ms is enough
+    while (millis() - start < 1500 || _updatingFirmware) {  // usually 100–300ms is enough
         _mqtt.loop();
         delay(10);
     }
-    
-    return WorkResult{ true, _windowState };
+
+    return windowState;
 }
 
 void HAManager::_setFirmwareVersion(const char* latestVersion) {
