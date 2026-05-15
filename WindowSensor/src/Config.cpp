@@ -7,7 +7,6 @@ Config::Config() : deviceName(""),
       mqttUser(""),
       mqttPass(""),
       sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
-      loopTime(3000UL),
       rTop(1000.0),
       rBottom(470.0) {
 }
@@ -22,7 +21,6 @@ bool Config::load() {
             mqttUser = _prefs.getString("mqtt_user", "");
             mqttPass = _prefs.getString("mqtt_pass", "");
             sleepTime = _prefs.getULong("sleep_time", sleepTime);
-            loopTime = _prefs.getULong("loop_time", loopTime);
             rTop = _prefs.getFloat("rTop", rTop);
             rBottom = _prefs.getFloat("rBottom", rBottom);
         }
@@ -38,7 +36,6 @@ bool Config::load() {
     DEBUG_PRINTLN("  mqtt_user: " + mqttUser);
     DEBUG_PRINTLN("  mqtt_pass: " + mqttPass);
     DEBUG_PRINTLN("  sleep_time: " + Utils::millisToHuman(sleepTime));
-    DEBUG_PRINTLN("  loop_time: " + Utils::millisToHuman(loopTime));
     DEBUG_PRINTLN("  rTop (kΩ): " + String(rTop));
     DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
 
@@ -53,7 +50,6 @@ void Config::save() {
         mqttUser = _p_user->getValue();
         mqttPass = _p_pass->getValue();
         sleepTime = Utils::parseDuration(_p_sleep_time->getValue());
-        loopTime = Utils::parseDuration(_p_loop_time->getValue());
         rTop = String(_p_rTop->getValue()).toFloat();
         rBottom = String(_p_rBottom->getValue()).toFloat();
     }
@@ -64,7 +60,6 @@ void Config::save() {
     _prefs.putString("mqtt_user", mqttUser);
     _prefs.putString("mqtt_pass", mqttPass);
     _prefs.putULong("sleep_time", sleepTime);
-    _prefs.putULong("loop_time", loopTime);
     _prefs.putFloat("rTop", rTop);
     _prefs.putFloat("rBottom", rBottom);
     _prefs.end();
@@ -84,14 +79,42 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
     _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
     _p_sleep_time = new WiFiManagerParameter("sleep_time", "Sleep time", Utils::millisToHuman(sleepTime).c_str(), 32);
-    _p_loop_time = new WiFiManagerParameter("loop_time", "Loop time", Utils::millisToHuman(loopTime).c_str(), 32);
     // use number inputs so only digits/decimal allowed
     _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
 
-    wm.setParamsPage(true);
+    const char * menu[] = {"wifi","param","sep","info","update","exit"};
+    wm.setMenu(menu, 5);
+    wm.setDarkMode(true);
 
-    // add them in grouped order
+    // Add custom head element with navigation and save redirect
+    wm.setCustomHeadElement("<style>"
+        ".nav-bar { padding: 20px; margin: 20px 0; border: 1px solid #555; background-color: #282828; text-align: center; border-radius: .3rem; }"
+        ".nav-bar a { margin: 0 5px; padding: 5px 10px; text-decoration: none; border-radius: 3px; display: inline-block; }"
+        ".nav-bar a.active { background: #007bff; color: white; }"
+        ".nav-bar a:not(.active) { background: #989fa5; color: white; }"
+        "</style>"
+        "<script>"
+        "document.addEventListener('DOMContentLoaded', function() {"
+        "    var navHtml = '<div class=\"nav-bar\">"
+        "<a href=\"/\" class=\"' + (window.location.pathname === '/' ? 'active' : '') + '\">Home</a>"
+        "<a href=\"/wifi\" class=\"' + (window.location.pathname === '/wifi' ? 'active' : '') + '\">WiFi</a>"
+        "<a href=\"/info\" class=\"' + (window.location.pathname === '/info' ? 'active' : '') + '\">Info</a>"
+        "<a href=\"/param\" class=\"' + (window.location.pathname === '/param' ? 'active' : '') + '\">Params</a>"
+        "<a href=\"/update\" class=\"' + (window.location.pathname === '/update' ? 'active' : '') + '\">Update</a>"
+        "</div>';"
+        "    var body = document.querySelector('body');"
+        "    if (body) {"
+        "        body.insertAdjacentHTML('afterbegin', navHtml);"
+        "    }"
+        "    var saveBtn = document.querySelector('input[type=\"submit\"][value=\"Save\"]');"
+        "    if (saveBtn) {"
+        "        saveBtn.addEventListener('click', function() {"
+        "            setTimeout(function() { window.location.href = '/'; }, 2000);"
+        "        });"
+        "    }"
+        "});"
+        "</script>");
     wm.addParameter(_p_group_general);
     wm.addParameter(_p_dev);
 
@@ -102,7 +125,6 @@ void Config::configureWiFiManager(WiFiManager& wm) {
 
     wm.addParameter(_p_adv_begin);
     wm.addParameter(_p_sleep_time);
-    wm.addParameter(_p_loop_time);
     wm.addParameter(_p_rTop);
     wm.addParameter(_p_rBottom);
     wm.addParameter(_p_adv_end);
