@@ -1,0 +1,1 @@
+%USERPROFILE%\.platformio\penv\Scripts\activate.bat

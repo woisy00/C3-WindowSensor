@@ -1,1 +1,0 @@
-esptool --chip esp32c3 -p COM4 --baud 460800 write_flash -z --flash_mode dio 0x10000 WindowSensor-v1.0.22.bin
