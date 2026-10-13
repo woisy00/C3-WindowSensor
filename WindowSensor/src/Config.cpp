@@ -6,9 +6,14 @@ Config::Config() : deviceName(""),
       mqttHost(""),
       mqttUser(""),
       mqttPass(""),
-      sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
+      sleepTime(5UL * 60UL * 1000UL),  // 5 min default
       rTop(1000.0),
-      rBottom(470.0) {
+      rBottom(470.0),
+      reportMode(ReportMode::BLE),
+      reedMode(ReedMode::SINGLE),
+      singleOpenLevel(OpenLevel::Low),
+      _p_dev(nullptr),
+      _shouldSave(false) {
 }
 
 bool Config::load() {
@@ -23,6 +28,9 @@ bool Config::load() {
             sleepTime = _prefs.getULong("sleep_time", sleepTime);
             rTop = _prefs.getFloat("rTop", rTop);
             rBottom = _prefs.getFloat("rBottom", rBottom);
+            reportMode = ReportModeUtil::fromStored(_prefs.getULong("report_mode", (unsigned long)ReportMode::MQTT));
+            reedMode = ReedModeUtil::fromStored(_prefs.getULong("reed_mode", 0));
+            singleOpenLevel = ReedModeUtil::openLevelFromStored(_prefs.getULong("single_open", 0));
         }
         _prefs.end();        
     } else {
@@ -39,12 +47,31 @@ bool Config::load() {
     DEBUG_PRINTLN("  rTop (kΩ): " + String(rTop));
     DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
 
-    return mqttHost.length() > 0 && deviceName != "window-sensor";
+    DEBUG_PRINTLN("  report_mode: " + String(ReportModeUtil::toText(reportMode)));
+    DEBUG_PRINTLN("  reed_mode: " + String(ReedModeUtil::toText(reedMode)));
+    DEBUG_PRINTLN("  single_open: " + String(ReedModeUtil::toText(singleOpenLevel)));
+
+    // BLE reporting needs no broker; MQTT reporting still requires a host
+    return (reportMode == ReportMode::BLE || mqttHost.length() > 0) && deviceName != "window-sensor";
 }
 
 void Config::save() {
     // update fields from portal parameters if they exist
-    if (_p_dev->getValue() != nullptr) {
+    if (_p_dev != nullptr && _p_dev->getValue() != nullptr) {
+        if (!ReportModeUtil::isValidText(_p_report->getValue())) {
+            log_e("Invalid reporting mode: use mqtt or ble. Configuration was not saved.");
+            return;
+        }
+        ReedMode requestedMode = reedMode;
+        OpenLevel requestedLevel = singleOpenLevel;
+        if (!ReedModeUtil::parseMode(_p_reed->getValue(), requestedMode)) {
+            log_e("Invalid reed mode: use spdt or single. Configuration was not saved.");
+            return;
+        }
+        if (!ReedModeUtil::parseOpenLevel(_p_open_level->getValue(), requestedLevel)) {
+            log_e("Invalid single-reed open level: use HIGH or LOW. Configuration was not saved.");
+            return;
+        }
         deviceName = _p_dev->getValue();
         mqttHost = _p_host->getValue();
         mqttUser = _p_user->getValue();
@@ -52,6 +79,9 @@ void Config::save() {
         sleepTime = Utils::parseDuration(_p_sleep_time->getValue());
         rTop = String(_p_rTop->getValue()).toFloat();
         rBottom = String(_p_rBottom->getValue()).toFloat();
+        reportMode = ReportModeUtil::fromText(_p_report->getValue(), reportMode);
+        reedMode = requestedMode;
+        singleOpenLevel = requestedLevel;
     }
 
     _prefs.begin("config", false);
@@ -62,6 +92,9 @@ void Config::save() {
     _prefs.putULong("sleep_time", sleepTime);
     _prefs.putFloat("rTop", rTop);
     _prefs.putFloat("rBottom", rBottom);
+    _prefs.putULong("report_mode", (unsigned long)reportMode);
+    _prefs.putULong("reed_mode", (unsigned long)reedMode);
+    _prefs.putULong("single_open", (unsigned long)singleOpenLevel);
     _prefs.end();
 }
 
@@ -75,6 +108,9 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_adv_end = new WiFiManagerParameter("</details>");
 
     _p_dev = new WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
+    _p_report = new WiFiManagerParameter("report", "Report via", ReportModeUtil::toText(reportMode), 8);
+    _p_reed = new WiFiManagerParameter("reed_mode", "Reed wiring", ReedModeUtil::toText(reedMode), 16);
+    _p_open_level = new WiFiManagerParameter("single_open", "Single reed: GPIO1 level when window OPEN", ReedModeUtil::toText(singleOpenLevel), 16);
     _p_host = new WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
     _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
     _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
@@ -83,8 +119,8 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
 
-    const char * menu[] = {"wifi","param","sep","info","update","exit"};
-    wm.setMenu(menu, 5);
+    const char * menu[] = {"wifi","param","sep","info","update","exit","restart"};
+    wm.setMenu(menu, sizeof(menu) / sizeof(menu[0]));
     wm.setDarkMode(true);
 
     // Add custom head element with navigation and save redirect
@@ -96,6 +132,26 @@ void Config::configureWiFiManager(WiFiManager& wm) {
         "</style>"
         "<script>"
         "document.addEventListener('DOMContentLoaded', function() {"
+        "    var dropdowns = {"
+        "        report: [['mqtt', 'MQTT'], ['ble', 'BLE']],"
+        "        reed_mode: [['spdt', 'SPDT'], ['single', 'Single (GPIO1)']],"
+        "        single_open: [['HIGH', 'HIGH'], ['LOW', 'LOW']]"
+        "    };"
+        "    Object.keys(dropdowns).forEach(function(id) {"
+        "        var input = document.getElementById(id);"
+        "        if (!input) return;"
+        "        var select = document.createElement('select');"
+        "        select.id = input.id;"
+        "        select.name = input.name;"
+        "        dropdowns[id].forEach(function(choice) {"
+        "            var option = document.createElement('option');"
+        "            option.value = choice[0];"
+        "            option.textContent = choice[1];"
+        "            select.appendChild(option);"
+        "        });"
+        "        select.value = input.value;"
+        "        input.parentNode.replaceChild(select, input);"
+        "    });"
         "    var navHtml = '<div class=\"nav-bar\">"
         "<a href=\"/\" class=\"' + (window.location.pathname === '/' ? 'active' : '') + '\">Home</a>"
         "<a href=\"/wifi\" class=\"' + (window.location.pathname === '/wifi' ? 'active' : '') + '\">WiFi</a>"
@@ -117,6 +173,9 @@ void Config::configureWiFiManager(WiFiManager& wm) {
         "</script>");
     wm.addParameter(_p_group_general);
     wm.addParameter(_p_dev);
+    wm.addParameter(_p_report);
+    wm.addParameter(_p_reed);
+    wm.addParameter(_p_open_level);
 
     wm.addParameter(_p_group_mqtt);
     wm.addParameter(_p_host);

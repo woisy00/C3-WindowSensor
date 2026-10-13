@@ -12,7 +12,8 @@ A compact, battery‑powered Wi‑Fi window/door sensor built around the ESP32�
 - 📡 MQTT integration with Home Assistant (auto discovery via ArduinoHA)
 - 🔄 OTA firmware updates over HTTP
 - 🌐 Wi‑Fi configuration portal
-- 🔘 Boot button for manual configuration entry
+- 🔘 Maintenance button (GPIO5): hold 3 s to start the Wi‑Fi portal (settings + firmware update)
+- 📻 Optional BLE reporting (BTHome v2) without Wi‑Fi: window, battery % and battery voltage
 - 💤 Wake on both open and close events
 
 ---
@@ -60,12 +61,36 @@ ADC
 
 | GPIO  | Function                     |
 |-------|------------------------------|
-| GPIO3 | Reed switch NO               |
+| GPIO1 | Reed switch NC (SPDT) or single reed / deep-sleep wake |
+| GPIO2 | Reed switch NO (SPDT only; unused in single mode) |
 | GPIO4 | Battery ADC                  |
-| GPIO5 | Configuration button         |
-| GPIO8 | Reed switch NC (optional)    |
+| GPIO5 | Maintenance button (active low, deep-sleep wake) |
 
-> Pins may vary depending on the module.
+These are the GPIO numbers used by the PCB and firmware (`IO1`/`IO2` on the
+XH-C3F map to GPIO1/GPIO2).
+
+#### Reed wiring and polarity (Arduino firmware)
+
+The portal's **Reed wiring** selects `spdt` (default, including existing saved configurations)
+or `single`. SPDT keeps the existing interpretation: closed = GPIO2 LOW / GPIO1 HIGH,
+open = GPIO2 HIGH / GPIO1 LOW. Use external pull-ups on both contacts with the reed common
+connected to GND.
+
+For a single reed, connect only GPIO1; GPIO2 is not sampled. Keep an external pull-up from
+GPIO1 to the sensor's supply and connect the reed between GPIO1 and GND. Set **Single reed:
+GPIO1 level when window OPEN** to `HIGH` (default) if the contact opens when the window opens,
+or `LOW` for the opposite contact/magnet arrangement. This setting changes reporting polarity,
+not the electrical bias. Both settings are saved in NVS and apply to MQTT and BLE.
+Other wiring (e.g. a reed switching to supply) requires an appropriate external pull-down.
+Never leave GPIO1 floating, and use only ESP32-compatible voltage levels.
+
+The external bias must reliably cross the input thresholds across battery voltage, leakage
+and cable noise. A high-impedance pull-up (such as 1 MΩ) must not compete with an internal
+sleep pulldown. Arduino 2 / IDF 4.4 has no runtime API to disable automatic wake pulls:
+the firmware holds GPIO1's input/no-internal-pull pad configuration before sleep preparation,
+so IDF's automatic pulls cannot change its bias; input transitions still reach the wake logic.
+GPIO5 retains its internal sleep pull-up. Validate both transitions and button wake on the
+actual PCB, especially with long leads or high-value resistors.
 
 ---
 
@@ -81,16 +106,28 @@ The sketch uses the Arduino framework and the following libraries:
 
 ### Power saving strategy
 
-Normal wake cycle:
+Normal wake cycle (reporting mode **MQTT**, the default):
 
-1. Wake on reed interrupt
+1. Wake on reed interrupt or timer
 2. Connect to Wi‑Fi
 3. Establish MQTT connection
 4. Publish window state and battery voltage
 5. Check for pending OTA update command
 6. Enter deep sleep
 
-Typical awake time: **0.8–1.5 seconds**.
+Normal wake cycle (reporting mode **BLE**): the same, but Wi‑Fi is never initialized. Instead a short
+BTHome v2 advertisement burst (non‑connectable, 100–200 ms interval, about 3 s) is sent and the device sleeps again.
+Wi‑Fi only starts for first provisioning (no valid configuration) or deliberate maintenance (button hold).
+
+The deep‑sleep wake sources are the timer, GPIO1 at the **opposite of its current raw level**
+(HIGH or LOW, in either reed mode), and GPIO5 **LOW** simultaneously. GPIO2 is never a wake source.
+The state is checked again immediately before sleep; a changed state is reported on the next loop.
+Invalid SPDT states (both contacts HIGH or both LOW) log an error and use a one-second retry timer
+with button wake retained instead of reed wake.
+The installed IDF 4.4.7 [wake implementation](https://github.com/espressif/esp-idf/blob/v4.4.7/components/esp_hw_support/sleep_modes.c)
+accumulates per-pin wake masks, allowing GPIO1 HIGH and GPIO5 LOW in separate calls.
+GPIO1 uses external bias protected by pad hold; GPIO5 uses the automatic internal pull-up.
+BLE mode stays awake for the three-second burst plus startup and sensor sampling.
 
 ---
 
@@ -353,23 +390,47 @@ To use these automations, copy the YAML content into your Home Assistant `automa
 
 ## ⚙ Configuration Mode
 
-The Wi‑Fi/MQTT portal is started when:
+The Wi‑Fi portal (settings **and** firmware update) is started when:
 
-- No Wi‑Fi configuration is saved, **or**
-- Configuration button is held during boot.
+- no valid configuration is saved (first provisioning, no timeout), **or**
+- the button on GPIO5 is held **3 seconds continuously**.
+
+Button behaviour:
+
+- A press wakes the device from deep sleep. A shorter press is just a wake: the normal report is sent and the device sleeps again.
+- Holding for 3 s (also while the device is already awake or booting with the button held) starts maintenance. The 3 s are counted from the moment the firmware sees the button down; contact bounce shorter than 30 ms does not restart the count.
+- The device never goes back to sleep while a hold is still being evaluated.
+
+Maintenance connects to the stored Wi‑Fi and serves the portal at the device's IP / <device name>.local.
+If the stored network is not reachable the device opens the access point Window-Wensor-XXXXXX instead. Both variants offer
+the **Update** page for uploading a firmware .bin. Maintenance ends after 10 minutes without exiting (first provisioning
+has no timeout); the device then restarts into normal operation. In BLE mode no firmware is pushed over MQTT; use the portal.
 
 ### Options in the portal
 
-Configuration parameters are now organized into sections for easier navigation:
+Configuration parameters are organized into sections:
 
-- **General** – device name, Wi‑Fi credentials (SSID/password)
-- **MQTT** – broker host/user/pass
-- **Advanced** – sleep/loop timings and voltage divider values (collapsed by default; click to expand). The divider values are numeric-only inputs so letters cannot be entered.
+- **General** – device name, **Report via** (mqtt or ble), **Reed wiring** (spdt or single),
+  **Single reed open level** (HIGH or LOW), Wi‑Fi credentials (SSID/password)
+- **MQTT** – broker host/user/pass (not needed for BLE mode)
+- **Advanced** – sleep timer and voltage divider values (collapsed by default). The divider values are numeric-only inputs.
 
-Older versions showed a flat list; the new layout uses headings so you can quickly find what you need.
+The reporting mode is stored persistently; configurations saved by older firmware default to **mqtt**.
+Reed mode defaults to **spdt**, and single-reed open level to **HIGH**. Values are case-insensitive;
+invalid mode/polarity values log an explicit error and no application configuration is saved.
+
+### BLE (BTHome v2)
+
+Home Assistant's Bluetooth/BTHome integration (or any BTHome receiver in range, e.g. an ESPHome Bluetooth proxy) discovers
+the sensor automatically. Objects, sorted by ID: battery 0x01 (%), voltage 0x0C (V, 0.001 resolution), window 0x2D
+(0 closed, 1 open). The advertisement is unencrypted and trigger based (device info 0x44).
+
+Enable `DEBUG` in `WindowSensor/src/WindowSensorDefines.h` to see serial BLE
+diagnostics at 115200 baud: sensor values, raw BTHome payload, HCI commands and
+completion times, advertising interval, burst completion/interruption, and
+controller shutdown. A completed burst does not confirm reception by Home Assistant.
 
 ---
-
 ## 🔋 Battery Life
 
 | Mode          | Current draw        |
@@ -393,11 +454,18 @@ framework = arduino
 monitor_speed = 115200
 ```
 
-Upload with:
+The firmware includes the ESP32 BLE controller (no extra libraries; about 1.06 MB of the 1.31 MB app partition). Upload with:
 
 ```sh
 pio run -t upload
 ```
+
+Host-side unit tests for the BTHome encoder, button hold logic, reporting/reed configuration,
+reed polarity, state guards and wake plans (need a native g++): `pio test -d WindowSensor -e native`.
+
+An ESPHome configuration that advertises the window state over BTHome and
+enables Wi-Fi only for OTA mode is available in
+[`WindowSensor/esphome`](WindowSensor/esphome/README.md).
 
 ---
 
