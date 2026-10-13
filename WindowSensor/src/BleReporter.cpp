@@ -48,6 +48,7 @@ static bool check(esp_err_t err, const char* what) {
 
 // Sends one HCI command and waits for its completion event, so commands never overlap.
 static bool sendCommand(uint16_t opcode, const uint8_t* params, uint8_t paramLen) {
+    DEBUG_PRINTLN("BLE HCI send: opcode=0x" + String(opcode, HEX) + ", parameter bytes=" + String(paramLen));
     uint8_t pkt[4 + 32];
     pkt[0] = 0x01;
     pkt[1] = (uint8_t)(opcode & 0xFF);
@@ -78,21 +79,30 @@ static bool sendCommand(uint16_t opcode, const uint8_t* params, uint8_t paramLen
         log_e("BLE opcode 0x%04X received opcode 0x%04X status 0x%02X", opcode, s_cmdOpcode, s_cmdStatus);
         return false;
     }
+    DEBUG_PRINTLN("BLE HCI complete: opcode=0x" + String(opcode, HEX) +
+                  ", status=0x" + String(s_cmdStatus, HEX) +
+                  ", completion wait=" + String(millis() - start) + " ms");
     return true;
 }
 
 BleReporter::BleReporter(Config& cfg) : _config(cfg) {}
 
 bool BleReporter::_start() {
+    DEBUG_PRINTLN("BLE initializing controller (Wi-Fi remains off)");
     esp_bt_controller_config_t cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     if (!check(esp_bt_controller_init(&cfg), "controller init")) return false;
     _controllerInit = true;
+    DEBUG_PRINTLN("BLE controller initialized");
     if (!check(esp_bt_controller_enable(ESP_BT_MODE_BLE), "controller enable")) return false;
     _controllerEnabled = true;
+    DEBUG_PRINTLN("BLE controller enabled; registering HCI callback");
     return check(esp_vhci_host_register_callback(&s_hostCallback), "register HCI callback");
 }
 
 bool BleReporter::_advertise(const uint8_t* data, size_t len) {
+    DEBUG_PRINTLN("BLE configuring advertisement: " + String(len) + " bytes, interval " +
+                  String(ADV_INTERVAL_MIN * 0.625f) + "-" +
+                  String(ADV_INTERVAL_MAX * 0.625f) + " ms, channels 37/38/39");
     if (!sendCommand(OP_RESET, nullptr, 0)) return false;
 
     uint8_t params[15] = {};
@@ -119,9 +129,14 @@ bool BleReporter::_advertise(const uint8_t* data, size_t len) {
 }
 
 bool BleReporter::report(const Hardware::WindowState& state, float batteryVoltage) {
+    uint32_t reportStart = millis();
     float percent = BatteryUtil::voltageToPercent(batteryVoltage, BatteryType::ALKALINE);
     float mv = batteryVoltage * 1000.0f;
     uint16_t voltageMv = mv < 0 ? 0 : (mv > 65535.0f ? 65535 : (uint16_t)(mv + 0.5f));
+    DEBUG_PRINTLN("BLE report: window=" + String(state.isOpen() ? "OPEN" : "CLOSED") +
+                  ", NO=" + String(state.no) + ", NC=" + String(state.nc) +
+                  ", battery=" + String(batteryVoltage, 3) + " V (" +
+                  String(percent, 0) + "%)");
 
     uint8_t adv[BTHome::MAX_ADV_LEN];
     size_t len = BTHome::buildAdvertisement(adv, sizeof(adv), state.isOpen(), (uint8_t)(percent + 0.5f),
@@ -130,28 +145,47 @@ bool BleReporter::report(const Hardware::WindowState& state, float batteryVoltag
         log_e("BLE advertisement payload too large");
         return false;
     }
+#if defined(DEBUG)
+    String payload;
+    payload.reserve(len * 3);
+    for (size_t i = 0; i < len; i++) {
+        if (i) payload += ' ';
+        if (adv[i] < 0x10) payload += '0';
+        payload += String(adv[i], HEX);
+    }
+    DEBUG_PRINTLN("BLE BTHome payload (" + String(len) + " bytes): " + payload);
+#endif
 
     bool ok = _start() && _advertise(adv, len);
     if (ok) {
-        DEBUG_PRINTLN("BLE advertising burst started");
+        DEBUG_PRINTLN("BLE advertising burst started for " + String(BURST_MS) + " ms");
         // a maintenance hold during the burst aborts it
         ok = !ButtonMonitor::delayServicing(BURST_MS);
+        DEBUG_PRINTLN(ok ? "BLE advertising burst completed (reception is not acknowledged)" :
+                          "BLE advertising interrupted by maintenance button hold");
+    } else {
+        DEBUG_PRINTLN("BLE advertising could not start");
     }
     shutdown();
+    DEBUG_PRINTLN("BLE report finished: " + String(ok ? "completed" : "failed/interrupted") +
+                  ", elapsed=" + String(millis() - reportStart) + " ms");
     return ok;
 }
 
 void BleReporter::shutdown() {
     if (_advertising) {
+        DEBUG_PRINTLN("BLE stopping advertising");
         uint8_t disable = 0;
         sendCommand(OP_LE_SET_ADV_ENABLE, &disable, 1);
         _advertising = false;
     }
     if (_controllerEnabled) {
+        DEBUG_PRINTLN("BLE disabling controller");
         check(esp_bt_controller_disable(), "controller disable");
         _controllerEnabled = false;
     }
     if (_controllerInit) {
+        DEBUG_PRINTLN("BLE deinitializing controller");
         check(esp_bt_controller_deinit(), "controller deinit");
         _controllerInit = false;
     }
