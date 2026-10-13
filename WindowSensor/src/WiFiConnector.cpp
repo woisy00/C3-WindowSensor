@@ -51,7 +51,7 @@ void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec) {
         char macStr[13]; // "AABBCCDDEEFF"
         snprintf(macStr, sizeof(macStr), "%02X%02X%02X%02X%02X%02X", 
                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-        String apName = "Window-Wensor-" + String(macStr).substring(6); // Last 4 chars of MAC
+        String apName = "Window-Sensor-" + String(macStr).substring(6); // Last 4 chars of MAC
         if (portalTimeoutSec > 0) {
             _wm.setConfigPortalTimeout(portalTimeoutSec);
         }

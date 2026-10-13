@@ -6,12 +6,12 @@ Config::Config() : deviceName(""),
       mqttHost(""),
       mqttUser(""),
       mqttPass(""),
-      sleepTime(4UL * 60UL * 60UL * 1000UL),  // 4h default
+      sleepTime(5UL * 60UL * 1000UL),  // 5 min default
       rTop(1000.0),
       rBottom(470.0),
-      reportMode(ReportMode::MQTT),
-      reedMode(ReedMode::SPDT),
-      singleOpenLevel(OpenLevel::High),
+      reportMode(ReportMode::BLE),
+      reedMode(ReedMode::SINGLE),
+      singleOpenLevel(OpenLevel::Low),
       _p_dev(nullptr),
       _shouldSave(false) {
 }
@@ -108,12 +108,9 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_adv_end = new WiFiManagerParameter("</details>");
 
     _p_dev = new WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
-    _p_report_list = new WiFiManagerParameter("<datalist id='report_modes'><option value='mqtt'><option value='ble'></datalist>");
-    _p_report = new WiFiManagerParameter("report", "Report via (mqtt or ble)", ReportModeUtil::toText(reportMode), 8, "list='report_modes' autocomplete='off'");
-    _p_reed_list = new WiFiManagerParameter("<datalist id='reed_modes'><option value='spdt'><option value='single'></datalist>");
-    _p_reed = new WiFiManagerParameter("reed_mode", "Reed wiring (spdt or single on GPIO1)", ReedModeUtil::toText(reedMode), 16, "list='reed_modes' autocomplete='off'");
-    _p_open_level_list = new WiFiManagerParameter("<datalist id='open_levels'><option value='HIGH'><option value='LOW'></datalist>");
-    _p_open_level = new WiFiManagerParameter("single_open", "Single reed: GPIO1 level when window OPEN (HIGH or LOW)", ReedModeUtil::toText(singleOpenLevel), 16, "list='open_levels' autocomplete='off'");
+    _p_report = new WiFiManagerParameter("report", "Report via", ReportModeUtil::toText(reportMode), 8);
+    _p_reed = new WiFiManagerParameter("reed_mode", "Reed wiring", ReedModeUtil::toText(reedMode), 16);
+    _p_open_level = new WiFiManagerParameter("single_open", "Single reed: GPIO1 level when window OPEN", ReedModeUtil::toText(singleOpenLevel), 16);
     _p_host = new WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
     _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
     _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
@@ -122,8 +119,8 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
 
-    const char * menu[] = {"wifi","param","sep","info","update","exit"};
-    wm.setMenu(menu, 5);
+    const char * menu[] = {"wifi","param","sep","info","update","exit","restart"};
+    wm.setMenu(menu, sizeof(menu) / sizeof(menu[0]));
     wm.setDarkMode(true);
 
     // Add custom head element with navigation and save redirect
@@ -135,6 +132,26 @@ void Config::configureWiFiManager(WiFiManager& wm) {
         "</style>"
         "<script>"
         "document.addEventListener('DOMContentLoaded', function() {"
+        "    var dropdowns = {"
+        "        report: [['mqtt', 'MQTT'], ['ble', 'BLE']],"
+        "        reed_mode: [['spdt', 'SPDT'], ['single', 'Single (GPIO1)']],"
+        "        single_open: [['HIGH', 'HIGH'], ['LOW', 'LOW']]"
+        "    };"
+        "    Object.keys(dropdowns).forEach(function(id) {"
+        "        var input = document.getElementById(id);"
+        "        if (!input) return;"
+        "        var select = document.createElement('select');"
+        "        select.id = input.id;"
+        "        select.name = input.name;"
+        "        dropdowns[id].forEach(function(choice) {"
+        "            var option = document.createElement('option');"
+        "            option.value = choice[0];"
+        "            option.textContent = choice[1];"
+        "            select.appendChild(option);"
+        "        });"
+        "        select.value = input.value;"
+        "        input.parentNode.replaceChild(select, input);"
+        "    });"
         "    var navHtml = '<div class=\"nav-bar\">"
         "<a href=\"/\" class=\"' + (window.location.pathname === '/' ? 'active' : '') + '\">Home</a>"
         "<a href=\"/wifi\" class=\"' + (window.location.pathname === '/wifi' ? 'active' : '') + '\">WiFi</a>"
@@ -156,11 +173,8 @@ void Config::configureWiFiManager(WiFiManager& wm) {
         "</script>");
     wm.addParameter(_p_group_general);
     wm.addParameter(_p_dev);
-    wm.addParameter(_p_report_list);
     wm.addParameter(_p_report);
-    wm.addParameter(_p_reed_list);
     wm.addParameter(_p_reed);
-    wm.addParameter(_p_open_level_list);
     wm.addParameter(_p_open_level);
 
     wm.addParameter(_p_group_mqtt);

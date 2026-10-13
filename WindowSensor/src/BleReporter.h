@@ -8,9 +8,9 @@
 // Only the BLE controller is initialized (HCI over VHCI, no Bluedroid host: it would not fit the app partition); Wi-Fi is never touched.
 class BleReporter {
 public:
-    static constexpr uint32_t BURST_MS = 3000;
+    static constexpr uint32_t BURST_MS = 1000;
     static constexpr uint16_t ADV_INTERVAL_MIN = 160; // 100 ms in 0.625 ms units
-    static constexpr uint16_t ADV_INTERVAL_MAX = 320; // 200 ms
+    static constexpr uint16_t ADV_INTERVAL_MAX = 160; // 320; // 200 ms
 
     explicit BleReporter(Config& cfg);
 

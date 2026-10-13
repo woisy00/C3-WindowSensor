@@ -38,11 +38,8 @@ private:
     WiFiManagerParameter* _p_rTop;
     WiFiManagerParameter* _p_rBottom;
     WiFiManagerParameter* _p_report;
-    WiFiManagerParameter* _p_report_list;
     WiFiManagerParameter* _p_reed;
     WiFiManagerParameter* _p_open_level;
-    WiFiManagerParameter* _p_reed_list;
-    WiFiManagerParameter* _p_open_level_list;
 
     // grouping headers (custom HTML only)
     WiFiManagerParameter* _p_group_general;
