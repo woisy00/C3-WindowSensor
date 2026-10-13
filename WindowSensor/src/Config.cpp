@@ -10,6 +10,8 @@ Config::Config() : deviceName(""),
       rTop(1000.0),
       rBottom(470.0),
       reportMode(ReportMode::MQTT),
+      reedMode(ReedMode::SPDT),
+      singleOpenLevel(OpenLevel::High),
       _p_dev(nullptr),
       _shouldSave(false) {
 }
@@ -27,6 +29,8 @@ bool Config::load() {
             rTop = _prefs.getFloat("rTop", rTop);
             rBottom = _prefs.getFloat("rBottom", rBottom);
             reportMode = ReportModeUtil::fromStored(_prefs.getULong("report_mode", (unsigned long)ReportMode::MQTT));
+            reedMode = ReedModeUtil::fromStored(_prefs.getULong("reed_mode", 0));
+            singleOpenLevel = ReedModeUtil::openLevelFromStored(_prefs.getULong("single_open", 0));
         }
         _prefs.end();        
     } else {
@@ -44,6 +48,8 @@ bool Config::load() {
     DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
 
     DEBUG_PRINTLN("  report_mode: " + String(ReportModeUtil::toText(reportMode)));
+    DEBUG_PRINTLN("  reed_mode: " + String(ReedModeUtil::toText(reedMode)));
+    DEBUG_PRINTLN("  single_open: " + String(ReedModeUtil::toText(singleOpenLevel)));
 
     // BLE reporting needs no broker; MQTT reporting still requires a host
     return (reportMode == ReportMode::BLE || mqttHost.length() > 0) && deviceName != "window-sensor";
@@ -56,6 +62,16 @@ void Config::save() {
             log_e("Invalid reporting mode: use mqtt or ble. Configuration was not saved.");
             return;
         }
+        ReedMode requestedMode = reedMode;
+        OpenLevel requestedLevel = singleOpenLevel;
+        if (!ReedModeUtil::parseMode(_p_reed->getValue(), requestedMode)) {
+            log_e("Invalid reed mode: use spdt or single. Configuration was not saved.");
+            return;
+        }
+        if (!ReedModeUtil::parseOpenLevel(_p_open_level->getValue(), requestedLevel)) {
+            log_e("Invalid single-reed open level: use HIGH or LOW. Configuration was not saved.");
+            return;
+        }
         deviceName = _p_dev->getValue();
         mqttHost = _p_host->getValue();
         mqttUser = _p_user->getValue();
@@ -64,6 +80,8 @@ void Config::save() {
         rTop = String(_p_rTop->getValue()).toFloat();
         rBottom = String(_p_rBottom->getValue()).toFloat();
         reportMode = ReportModeUtil::fromText(_p_report->getValue(), reportMode);
+        reedMode = requestedMode;
+        singleOpenLevel = requestedLevel;
     }
 
     _prefs.begin("config", false);
@@ -75,6 +93,8 @@ void Config::save() {
     _prefs.putFloat("rTop", rTop);
     _prefs.putFloat("rBottom", rBottom);
     _prefs.putULong("report_mode", (unsigned long)reportMode);
+    _prefs.putULong("reed_mode", (unsigned long)reedMode);
+    _prefs.putULong("single_open", (unsigned long)singleOpenLevel);
     _prefs.end();
 }
 
@@ -90,6 +110,10 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_dev = new WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
     _p_report_list = new WiFiManagerParameter("<datalist id='report_modes'><option value='mqtt'><option value='ble'></datalist>");
     _p_report = new WiFiManagerParameter("report", "Report via (mqtt or ble)", ReportModeUtil::toText(reportMode), 8, "list='report_modes' autocomplete='off'");
+    _p_reed_list = new WiFiManagerParameter("<datalist id='reed_modes'><option value='spdt'><option value='single'></datalist>");
+    _p_reed = new WiFiManagerParameter("reed_mode", "Reed wiring (spdt or single on GPIO1)", ReedModeUtil::toText(reedMode), 16, "list='reed_modes' autocomplete='off'");
+    _p_open_level_list = new WiFiManagerParameter("<datalist id='open_levels'><option value='HIGH'><option value='LOW'></datalist>");
+    _p_open_level = new WiFiManagerParameter("single_open", "Single reed: GPIO1 level when window OPEN (HIGH or LOW)", ReedModeUtil::toText(singleOpenLevel), 16, "list='open_levels' autocomplete='off'");
     _p_host = new WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
     _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
     _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
@@ -134,6 +158,10 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     wm.addParameter(_p_dev);
     wm.addParameter(_p_report_list);
     wm.addParameter(_p_report);
+    wm.addParameter(_p_reed_list);
+    wm.addParameter(_p_reed);
+    wm.addParameter(_p_open_level_list);
+    wm.addParameter(_p_open_level);
 
     wm.addParameter(_p_group_mqtt);
     wm.addParameter(_p_host);

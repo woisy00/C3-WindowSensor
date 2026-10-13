@@ -84,14 +84,14 @@ Hardware::WindowState HAManager::work() {
         delay(10);        
         // allow entering maintenance when the broker is unreachable
         if (ButtonMonitor::service()) {
-            return Hardware::readWindowState();
+            return Hardware::readWindowState(_config.reedMode, _config.singleOpenLevel);
         }
     }
 
     _mqtt.subscribe(_firmwareUpdateTopic.c_str());
     DEBUG_PRINTLN("Subscribed to firmware update topic (after connect): " + _firmwareUpdateTopic);
 
-    Hardware::WindowState windowState = Hardware::readWindowState();
+    Hardware::WindowState windowState = Hardware::readWindowState(_config.reedMode, _config.singleOpenLevel);
     float batteryVoltage = Hardware::readBattery(_config.rTop, _config.rBottom);
 
     _setFirmwareVersion();

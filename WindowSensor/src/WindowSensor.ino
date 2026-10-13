@@ -61,7 +61,7 @@ void loop() {
     Hardware::WindowState windowState;
 
     if (config.reportMode == ReportMode::BLE) {
-        windowState = Hardware::readWindowState();
+        windowState = Hardware::readWindowState(config.reedMode, config.singleOpenLevel);
         float batteryVoltage = Hardware::readBattery(config.rTop, config.rBottom);
         if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryVoltage)) {
             DEBUG_PRINTLN("BLE report failed or interrupted");

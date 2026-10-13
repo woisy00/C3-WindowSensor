@@ -4,6 +4,7 @@
 #include <WiFiManager.h>
 #include <Arduino.h>
 #include "ReportMode.h"
+#include "ReedMode.h"
 
 class Config {
 public:
@@ -15,6 +16,8 @@ public:
     float rTop;
     float rBottom;
     ReportMode reportMode;
+    ReedMode reedMode;
+    OpenLevel singleOpenLevel;
 
     Config();
 
@@ -36,6 +39,10 @@ private:
     WiFiManagerParameter* _p_rBottom;
     WiFiManagerParameter* _p_report;
     WiFiManagerParameter* _p_report_list;
+    WiFiManagerParameter* _p_reed;
+    WiFiManagerParameter* _p_open_level;
+    WiFiManagerParameter* _p_reed_list;
+    WiFiManagerParameter* _p_open_level_list;
 
     // grouping headers (custom HTML only)
     WiFiManagerParameter* _p_group_general;

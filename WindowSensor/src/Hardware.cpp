@@ -21,17 +21,26 @@ void Hardware::initPins() {
     // setting it explicitly avoids accidental digital writes
     pinMode(PIN_BAT_ADC, INPUT);
     pinMode(PIN_BUTTON, INPUT_PULLUP);
+    // IDF holds wake pads through deep sleep; release only after restoring input/pull settings.
+    gpio_hold_dis((gpio_num_t)PIN_NC);
+    gpio_hold_dis((gpio_num_t)PIN_NO); // compatibility with older firmware's GPIO2 wake
+    gpio_hold_dis((gpio_num_t)PIN_BUTTON);
 
     delay(50); // allow time for GPIO states to stabilize after power-up
 
 }
 
-Hardware::WindowState Hardware::readWindowState() {
+Hardware::WindowState Hardware::readWindowState(ReedMode mode, OpenLevel openLevel) {
     delay(100); // allow settling - reduced back since GPIO hold prevents floating after deep sleep
-    bool no = readDebouncedPin(PIN_NO);
+    bool no = mode == ReedMode::SPDT ? readDebouncedPin(PIN_NO) : false;
     bool nc = readDebouncedPin(PIN_NC);
     DEBUG_PRINTLN("Read window state: NO=" + Utils::boolToString(no) + ", NC=" + Utils::boolToString(nc));
-    return WindowState{ no, nc };
+    WindowState state;
+    state.no = no;
+    state.nc = nc;
+    state.mode = mode;
+    state.openLevel = openLevel;
+    return state;
 }
 
 int Hardware::readPin(int pin) {

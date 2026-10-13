@@ -15,7 +15,7 @@ void SleepManager::goToSleep(Hardware::WindowState windowState) {
         DEBUG_PRINTLN("Maintenance hold detected. Skipping sleep.");
         return;
     }
-    Hardware::WindowState currentState = Hardware::readWindowState(); // read again to ensure we have the latest state before sleeping
+    Hardware::WindowState currentState = Hardware::readWindowState(_config.reedMode, _config.singleOpenLevel);
        
     // Only proceed with sleep if the current state matches the expected state
     if (!currentState.matches(windowState)) {
@@ -24,48 +24,61 @@ void SleepManager::goToSleep(Hardware::WindowState windowState) {
     }
     
     unsigned long sleepTime = _config.sleepTime;
-    uint64_t wakeMask = 0;
-
-    if (currentState.no == LOW && currentState.nc == HIGH) {
-        // Wake when the currently-high NC contact goes low.
-        DEBUG_PRINTLN("Window is closed, setting wake on NC pin");
-        wakeMask |= (1ULL << Hardware::PIN_NC);
-    } else if (currentState.no == HIGH && currentState.nc == LOW) {
-        // Wake when the currently-high NO contact goes low.
-        DEBUG_PRINTLN("Window is open, setting wake on NO pin");
-        wakeMask |= (1ULL << Hardware::PIN_NO);
-    } else {
-        // Both pins are in the same state - this shouldn't happen with a proper SPDT switch
-        DEBUG_PRINTLN("Warning: Both NO and NC pins are in the same state. Skipping wake pins and waking after 1 sec.");
+    const auto plan = ReedLogic::wakePlan(currentState);
+    if (plan.retry) {
+        log_e("Invalid SPDT state: GPIO1 and GPIO2 have the same level. Retrying after 1 sec.");
         sleepTime = 1000ULL;
     }
 
-    // Button (active low) wakes alongside the currently-high reed contact. IDF enables the internal
-    // pull-up of low-level wake pins during deep sleep, so the button idles high without external parts.
-    wakeMask |= (1ULL << Hardware::PIN_BUTTON);
+    // Clear hardware wake left by an aborted sleep attempt.
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+    gpio_deep_sleep_wakeup_disable((gpio_num_t)Hardware::PIN_NC);
+    gpio_deep_sleep_wakeup_disable((gpio_num_t)Hardware::PIN_BUTTON);
 
-    for (int pin = 0; pin < 64; pin++) {
-        if ((wakeMask >> pin) & 1ULL) {
-            if (!esp_sleep_is_valid_wakeup_gpio((gpio_num_t)pin)) {
-                log_e("GPIO%d is not a valid deep sleep wake pin", pin);
-                wakeMask &= ~(1ULL << pin);
-                sleepTime = 1000ULL;
-            }
-        }
+    esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(1ULL << Hardware::PIN_BUTTON, ESP_GPIO_WAKEUP_GPIO_LOW);
+    if (err != ESP_OK) {
+        log_e("Failed to enable button wakeup: %s", esp_err_to_name(err));
+        sleepTime = 1000ULL;
     }
-    if (wakeMask != 0) {
-        esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(wakeMask, ESP_GPIO_WAKEUP_GPIO_LOW);
+    if (plan.reedEnabled) {
+        // IDF 4.4 accumulates per-pin wake masks: this does not overwrite GPIO5's LOW wake.
+        err = esp_deep_sleep_enable_gpio_wakeup(1ULL << Hardware::PIN_NC,
+                plan.reedHigh ? ESP_GPIO_WAKEUP_GPIO_HIGH : ESP_GPIO_WAKEUP_GPIO_LOW);
         if (err != ESP_OK) {
-            log_e("Failed to enable GPIO wakeup: %s", esp_err_to_name(err));
-            sleepTime = 1000ULL; // fall back to polling rather than sleeping deaf
+            log_e("Failed to enable GPIO1 wakeup: %s", esp_err_to_name(err));
+            sleepTime = 1000ULL;
         }
     }
 
+    // Arduino 2's prebuilt IDF 4.4 auto-enables pulls at sleep entry (HIGH wake => pulldown).
+    // Hold GPIO1's input/no-pull pad configuration BEFORE that step, preserving external bias.
+    // Input signals still change while held. GPIO5 keeps IDF's automatic sleep pull-up.
+    err = gpio_set_pull_mode((gpio_num_t)Hardware::PIN_NC, GPIO_FLOATING);
+    if (err == ESP_OK) err = gpio_hold_en((gpio_num_t)Hardware::PIN_NC);
+    if (err != ESP_OK) {
+        log_e("Cannot preserve GPIO1 external bias: %s. Skipping sleep.", esp_err_to_name(err));
+        return;
+    }
+
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     if (sleepTime > 0) {
         DEBUG_PRINTLN("Setting wake timer to " + Utils::millisToHuman(sleepTime));
-        esp_sleep_enable_timer_wakeup(sleepTime * 1000ULL);
+        err = esp_sleep_enable_timer_wakeup(sleepTime * 1000ULL);
+        if (err != ESP_OK) {
+            log_e("Failed to enable wake timer: %s. Skipping sleep.", esp_err_to_name(err));
+            gpio_hold_dis((gpio_num_t)Hardware::PIN_NC);
+            return;
+        }
     }
 
-    delay(50);    
+    delay(50);
+    // Final guard after wake/pull setup. In single mode GPIO2 is neither sampled nor compared.
+    const auto finalState = Hardware::readWindowState(_config.reedMode, _config.singleOpenLevel);
+    if (!finalState.matches(currentState) || digitalRead(Hardware::PIN_NC) != currentState.nc ||
+        ButtonMonitor::holdPending() || ButtonMonitor::maintenanceRequested()) {
+        gpio_hold_dis((gpio_num_t)Hardware::PIN_NC);
+        DEBUG_PRINTLN("State or button changed just before sleep. Skipping sleep.");
+        return;
+    }
     esp_deep_sleep_start();
 }
