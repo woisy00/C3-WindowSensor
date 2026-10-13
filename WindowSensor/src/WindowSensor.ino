@@ -9,11 +9,26 @@
 #include "Hardware.h"
 #include "HAManager.h"
 #include "SleepManager.h"
+#include "ButtonMonitor.h"
+#include "BleReporter.h"
+
+// Maintenance (config + OTA portal) is left automatically after this time to protect the battery.
+static constexpr uint32_t MAINTENANCE_TIMEOUT_SEC = 10 * 60;
 
 Config config;
 WiFiConnector wifiConnector(config);
 HAManager haManager(config);
 SleepManager sleepManager(config);
+BleReporter bleReporter(config);
+
+// Blocking Wi-Fi portal (settings + firmware update). Connects to the stored network if possible,
+// otherwise opens the access point. Always ends with a restart.
+static void runMaintenance(bool configExists) {
+    DEBUG_PRINTLN("Entering maintenance mode");
+    bleReporter.shutdown(); // BLE stack must be down before Wi-Fi starts
+    // first provisioning keeps the original no-timeout behaviour
+    wifiConnector.connect(true, configExists ? MAINTENANCE_TIMEOUT_SEC : 0);
+}
 
 void setup() {
     DEBUG_INIT();
@@ -23,19 +38,46 @@ void setup() {
     DEBUG_PRINTLN("Wakeup cause: " + Utils::wakeupCauseToString(wakeup_cause));
 
     Hardware::initPins();
+    ButtonMonitor::begin();
 
     bool configExists = config.load();
-    bool portalRequested = Hardware::bootButtonPressed();
-    DEBUG_PRINTLN("Portal requested");
+    // A button that is down at start (button wake, reset or boot) must be held 3 s continuously for
+    // maintenance. A shorter press is released here and the normal report cycle continues.
+    bool maintenanceRequested = ButtonMonitor::settle();
+    DEBUG_PRINTLN("Maintenance requested");
     DEBUG_PRINTLN("  config: " + Utils::boolToString(configExists));
-    DEBUG_PRINTLN("  button: " + Utils::boolToString(portalRequested));
+    DEBUG_PRINTLN("  button: " + Utils::boolToString(maintenanceRequested));
 
-    wifiConnector.connect(!configExists || portalRequested);
-
-    haManager.begin();    
+    if (maintenanceRequested || !configExists) {
+        runMaintenance(configExists);
+    } else if (config.reportMode == ReportMode::MQTT) {
+        wifiConnector.connect(false);
+        haManager.begin();
+    }
+    // BLE mode: Wi-Fi is not initialized at all on normal wakes
 }
 
 void loop() {
-    Hardware::WindowState windowState = haManager.work();
+    Hardware::WindowState windowState;
+
+    if (config.reportMode == ReportMode::BLE) {
+        windowState = Hardware::readWindowState();
+        float batteryVoltage = Hardware::readBattery(config.rTop, config.rBottom);
+        if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryVoltage)) {
+            DEBUG_PRINTLN("BLE report failed or interrupted");
+        }
+    } else {
+        windowState = haManager.work();
+    }
+
+    if (ButtonMonitor::maintenanceRequested()) {
+        runMaintenance(true);
+    }
+
+    // returns without sleeping if the state changed or a maintenance hold completed
     sleepManager.goToSleep(windowState);
+
+    if (ButtonMonitor::maintenanceRequested()) {
+        runMaintenance(true);
+    }
 }

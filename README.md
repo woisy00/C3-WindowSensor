@@ -12,7 +12,8 @@ A compact, battery‑powered Wi‑Fi window/door sensor built around the ESP32�
 - 📡 MQTT integration with Home Assistant (auto discovery via ArduinoHA)
 - 🔄 OTA firmware updates over HTTP
 - 🌐 Wi‑Fi configuration portal
-- 🔘 Boot button for manual configuration entry
+- 🔘 Maintenance button (GPIO5): hold 3 s to start the Wi‑Fi portal (settings + firmware update)
+- 📻 Optional BLE reporting (BTHome v2) without Wi‑Fi: window, battery % and battery voltage
 - 💤 Wake on both open and close events
 
 ---
@@ -60,12 +61,13 @@ ADC
 
 | GPIO  | Function                     |
 |-------|------------------------------|
-| GPIO3 | Reed switch NO               |
+| GPIO1 | Reed switch NC / deep-sleep wake |
+| GPIO2 | Reed switch NO               |
 | GPIO4 | Battery ADC                  |
-| GPIO5 | Configuration button         |
-| GPIO8 | Reed switch NC (optional)    |
+| GPIO5 | Maintenance button (active low, deep-sleep wake) |
 
-> Pins may vary depending on the module.
+These are the GPIO numbers used by the PCB and firmware (`IO1`/`IO2` on the
+XH-C3F map to GPIO1/GPIO2).
 
 ---
 
@@ -81,16 +83,22 @@ The sketch uses the Arduino framework and the following libraries:
 
 ### Power saving strategy
 
-Normal wake cycle:
+Normal wake cycle (reporting mode **MQTT**, the default):
 
-1. Wake on reed interrupt
+1. Wake on reed interrupt or timer
 2. Connect to Wi‑Fi
 3. Establish MQTT connection
 4. Publish window state and battery voltage
 5. Check for pending OTA update command
 6. Enter deep sleep
 
-Typical awake time: **0.8–1.5 seconds**.
+Normal wake cycle (reporting mode **BLE**): the same, but Wi‑Fi is never initialized. Instead a short
+BTHome v2 advertisement burst (non‑connectable, 100–200 ms interval, about 3 s) is sent and the device sleeps again.
+Wi‑Fi only starts for first provisioning (no valid configuration) or deliberate maintenance (button hold).
+
+The deep‑sleep wake sources are the timer, the currently‑high reed contact (GPIO1 or GPIO2, going low) and the
+button on GPIO5 (going low). The ESP‑IDF enables the internal pull resistors of these wake pins during deep sleep.
+BLE mode stays awake for the three-second burst plus startup and sensor sampling.
 
 ---
 
@@ -353,23 +361,39 @@ To use these automations, copy the YAML content into your Home Assistant `automa
 
 ## ⚙ Configuration Mode
 
-The Wi‑Fi/MQTT portal is started when:
+The Wi‑Fi portal (settings **and** firmware update) is started when:
 
-- No Wi‑Fi configuration is saved, **or**
-- Configuration button is held during boot.
+- no valid configuration is saved (first provisioning, no timeout), **or**
+- the button on GPIO5 is held **3 seconds continuously**.
+
+Button behaviour:
+
+- A press wakes the device from deep sleep. A shorter press is just a wake: the normal report is sent and the device sleeps again.
+- Holding for 3 s (also while the device is already awake or booting with the button held) starts maintenance. The 3 s are counted from the moment the firmware sees the button down; contact bounce shorter than 30 ms does not restart the count.
+- The device never goes back to sleep while a hold is still being evaluated.
+
+Maintenance connects to the stored Wi‑Fi and serves the portal at the device's IP / <device name>.local.
+If the stored network is not reachable the device opens the access point Window-Wensor-XXXXXX instead. Both variants offer
+the **Update** page for uploading a firmware .bin. Maintenance ends after 10 minutes without exiting (first provisioning
+has no timeout); the device then restarts into normal operation. In BLE mode no firmware is pushed over MQTT; use the portal.
 
 ### Options in the portal
 
-Configuration parameters are now organized into sections for easier navigation:
+Configuration parameters are organized into sections:
 
-- **General** – device name, Wi‑Fi credentials (SSID/password)
-- **MQTT** – broker host/user/pass
-- **Advanced** – sleep/loop timings and voltage divider values (collapsed by default; click to expand). The divider values are numeric-only inputs so letters cannot be entered.
+- **General** – device name, **Report via** (mqtt or ble), Wi‑Fi credentials (SSID/password)
+- **MQTT** – broker host/user/pass (not needed for BLE mode)
+- **Advanced** – sleep timer and voltage divider values (collapsed by default). The divider values are numeric-only inputs.
 
-Older versions showed a flat list; the new layout uses headings so you can quickly find what you need.
+The reporting mode is stored persistently; configurations saved by older firmware default to **mqtt**.
+
+### BLE (BTHome v2)
+
+Home Assistant's Bluetooth/BTHome integration (or any BTHome receiver in range, e.g. an ESPHome Bluetooth proxy) discovers
+the sensor automatically. Objects, sorted by ID: battery 0x01 (%), voltage 0x0C (V, 0.001 resolution), window 0x2D
+(0 closed, 1 open). The advertisement is unencrypted and trigger based (device info 0x44).
 
 ---
-
 ## 🔋 Battery Life
 
 | Mode          | Current draw        |
@@ -393,11 +417,17 @@ framework = arduino
 monitor_speed = 115200
 ```
 
-Upload with:
+The firmware includes the ESP32 BLE controller (no extra libraries; about 1.06 MB of the 1.31 MB app partition). Upload with:
 
 ```sh
 pio run -t upload
 ```
+
+Host-side unit tests for the BTHome encoder, button hold logic and reporting mode (need a native g++): `pio test -e native`.
+
+An ESPHome configuration that advertises the window state over BTHome and
+enables Wi-Fi only for OTA mode is available in
+[`WindowSensor/esphome`](WindowSensor/esphome/README.md).
 
 ---
 

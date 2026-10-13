@@ -1,4 +1,5 @@
 #include "HAManager.h"
+#include "ButtonMonitor.h"
 
 #define FW_OBJECT_ID "firmware"
 
@@ -81,6 +82,10 @@ Hardware::WindowState HAManager::work() {
     while (!_mqtt.isConnected()) {
         _mqtt.loop();
         delay(10);        
+        // allow entering maintenance when the broker is unreachable
+        if (ButtonMonitor::service()) {
+            return Hardware::readWindowState();
+        }
     }
 
     _mqtt.subscribe(_firmwareUpdateTopic.c_str());
@@ -109,6 +114,9 @@ Hardware::WindowState HAManager::work() {
     while (millis() - start < 1500 || _updatingFirmware) {  // usually 100–300ms is enough
         _mqtt.loop();
         delay(10);
+        if (!_updatingFirmware && ButtonMonitor::service()) {
+            break;
+        }
     }
 
     return windowState;
