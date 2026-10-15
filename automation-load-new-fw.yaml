@@ -1,0 +1,39 @@
+alias: 'BWS-01: Sync Sensor Firmware Version from GitHub'
+triggers:
+  - entity_id: sensor.woisy00_c3_windowsensor_neueste_version
+    trigger: state
+actions:
+  - action: downloader.download_file
+    metadata: {}
+    data:
+      overwrite: false
+      url: >-
+        https://github.com/woisy00/C3-WindowSensor/releases/download/{{
+        state_attr('sensor.woisy00_c3_windowsensor_neueste_version', 'tag')
+        }}/firmware.bin
+      filename: >-
+        {{ state_attr('sensor.woisy00_c3_windowsensor_neueste_version', 'tag')
+        }}.bin
+  - action: mqtt.publish
+    data:
+      topic: aha/firmware/BWS-01/state
+      retain: true
+      payload: '{{ states(''sensor.woisy00_c3_windowsensor_letztes_tag'') }}'
+  - repeat:
+      for_each: >-
+        {{ states.update | selectattr('entity_id', 'search', 'bws01_') |
+        map(attribute='entity_id') | list }}
+      sequence:
+        - data:
+            topic: >-
+              aha/{{ state_attr(repeat.item, 'unique_id').replace('bws01_', '')
+              }}/update/state
+            retain: true
+            payload: |-
+              {
+                "installed_version": "{{ state_attr(repeat.item, 'installed_version') | default('v1.0.0') }}",
+                "latest_version": "{{ states('sensor.woisy00_c3_windowsensor_letztes_tag') }}",
+                "title": "Neues Release verfügbar",
+                "in_progress": false
+              }
+          action: mqtt.publish

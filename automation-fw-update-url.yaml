@@ -1,0 +1,23 @@
+alias: 'BWS-01: Generate dynamic URL for firmware update'
+description: ''
+triggers:
+  - trigger: mqtt
+    options:
+      topic: aha/+/update/install
+      payload: install
+actions:
+  - variables:
+      sensor_mac: '{{ trigger.topic.split(''/'')[1] }}'
+      latest_ver: >-
+        {{ state_attr('sensor.woisy00_c3_windowsensor_neueste_version', 'tag')
+        }}
+      download_url: http://10.1.0.3:8123/local/firmware/BWS-01/{{ latest_ver }}.bin
+  - data:
+      topic: aha/{{ sensor_mac }}/update/install
+      payload: |-
+        {
+          "url": "{{ download_url }}",
+          "version": "{{ latest_ver }}"
+        }
+      retain: true
+    action: mqtt.publish
