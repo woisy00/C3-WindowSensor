@@ -1,4 +1,5 @@
 #include "WiFiConnector.h"
+#include "FirmwareManager.h"
 #include "Utils.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -16,7 +17,7 @@ void WiFiConnector::saveConfigCallback() {
         _instance->_config.markSave();
     }
 }
-void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec) {
+void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec, FirmwareManager* firmwareManager) {
     if (!_wmPtr) {
         _wmPtr = new WiFiManager();
     }
@@ -55,6 +56,9 @@ void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec) {
         if (portalTimeoutSec > 0) {
             _wm.setConfigPortalTimeout(portalTimeoutSec);
         }
+        if (firmwareManager != nullptr) {
+            firmwareManager->maintenancePortalStarted();
+        }
         _wm.startConfigPortal(apName.c_str());
     } else if (forceConfig) {
         WiFi.hostname(_config.deviceName);
@@ -64,11 +68,17 @@ void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec) {
         _config.configureWiFiManager(_wm);
         _wm.setSaveConfigCallback(WiFiConnector::saveConfigCallback);
         _wm.setSaveParamsCallback(WiFiConnector::saveConfigCallback);
+        if (firmwareManager != nullptr) {
+            firmwareManager->maintenancePortalStarted();
+        }
         _wm.startWebPortal();
         DEBUG_PRINTLN("Portal running");
         const unsigned long portalStart = millis();
         while (_wm.getWebPortalActive()) {
             _wm.process();
+            if (firmwareManager != nullptr) {
+                firmwareManager->service();
+            }
             delay(100);
             if (portalTimeoutSec > 0 && millis() - portalStart > portalTimeoutSec * 1000UL) {
                 DEBUG_PRINTLN("Portal timeout");
@@ -85,6 +95,9 @@ void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec) {
     if (_config.shouldSave()) {
         _config.save();
         delay(1000);
+    }
+    if (forceConfig && firmwareManager != nullptr) {
+        firmwareManager->service();
     }
 
     if (rebootRequested) {

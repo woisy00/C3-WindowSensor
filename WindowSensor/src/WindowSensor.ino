@@ -7,7 +7,7 @@
 #include "Config.h"
 #include "WiFiConnector.h"
 #include "Hardware.h"
-#include "HAManager.h"
+#include "FirmwareManager.h"
 #include "SleepManager.h"
 #include "ButtonMonitor.h"
 #include "BleReporter.h"
@@ -17,7 +17,7 @@ static constexpr uint32_t MAINTENANCE_TIMEOUT_SEC = 10 * 60;
 
 Config config;
 WiFiConnector wifiConnector(config);
-HAManager haManager(config);
+FirmwareManager firmwareManager(config);
 SleepManager sleepManager(config);
 BleReporter bleReporter(config);
 
@@ -27,7 +27,7 @@ static void runMaintenance(bool configExists) {
     DEBUG_PRINTLN("Entering maintenance mode");
     bleReporter.shutdown(); // BLE stack must be down before Wi-Fi starts
     // first provisioning keeps the original no-timeout behaviour
-    wifiConnector.connect(true, configExists ? MAINTENANCE_TIMEOUT_SEC : 0);
+    wifiConnector.connect(true, configExists ? MAINTENANCE_TIMEOUT_SEC : 0, &firmwareManager);
 }
 
 void setup() {
@@ -41,6 +41,7 @@ void setup() {
     ButtonMonitor::begin();
 
     bool configExists = config.load();
+    firmwareManager.begin();
     // A button that is down at start (button wake, reset or boot) must be held 3 s continuously for
     // maintenance. A shorter press is released here and the normal report cycle continues.
     bool maintenanceRequested = ButtonMonitor::settle();
@@ -50,24 +51,16 @@ void setup() {
 
     if (maintenanceRequested || !configExists) {
         runMaintenance(configExists);
-    } else if (config.reportMode == ReportMode::MQTT) {
-        wifiConnector.connect(false);
-        haManager.begin();
     }
-    // BLE mode: Wi-Fi is not initialized at all on normal wakes
 }
 
 void loop() {
     Hardware::WindowState windowState;
 
-    if (config.reportMode == ReportMode::BLE) {
-        windowState = Hardware::readWindowState(config.reedMode, config.singleOpenLevel);
-        float batteryVoltage = Hardware::readBattery(config.rTop, config.rBottom);
-        if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryVoltage)) {
-            DEBUG_PRINTLN("BLE report failed or interrupted");
-        }
-    } else {
-        windowState = haManager.work();
+    windowState = Hardware::readWindowState(config.reedMode, config.singleOpenLevel);
+    float batteryVoltage = Hardware::readBattery(config.rTop, config.rBottom);
+    if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryVoltage)) {
+        DEBUG_PRINTLN("BLE report failed or interrupted");
     }
 
     if (ButtonMonitor::maintenanceRequested()) {

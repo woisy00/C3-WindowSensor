@@ -3,7 +3,6 @@
 #include <Preferences.h>
 #include <WiFiManager.h>
 #include <Arduino.h>
-#include "ReportMode.h"
 #include "ReedMode.h"
 
 class Config {
@@ -15,7 +14,6 @@ public:
     unsigned long sleepTime;
     float rTop;
     float rBottom;
-    ReportMode reportMode;
     ReedMode reedMode;
     OpenLevel singleOpenLevel;
 
@@ -37,7 +35,6 @@ private:
     WiFiManagerParameter* _p_sleep_time;
     WiFiManagerParameter* _p_rTop;
     WiFiManagerParameter* _p_rBottom;
-    WiFiManagerParameter* _p_report;
     WiFiManagerParameter* _p_reed;
     WiFiManagerParameter* _p_open_level;
 

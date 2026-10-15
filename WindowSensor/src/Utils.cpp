@@ -1,4 +1,43 @@
 #include "Utils.h"
+#include <WiFi.h>
+#include <esp_mac.h>
+#include <memory>
+#include <new>
+
+namespace {
+String formatMacAddress(const uint8_t* mac, const char* format) {
+    if (format == nullptr) {
+        return String();
+    }
+    const int length = snprintf(nullptr, 0, format,
+                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (length < 0) {
+        return String();
+    }
+    const size_t bufferSize = static_cast<size_t>(length) + 1;
+    std::unique_ptr<char[]> buffer(new (std::nothrow) char[bufferSize]);
+    if (!buffer) {
+        return String();
+    }
+    snprintf(buffer.get(), bufferSize, format,
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(buffer.get());
+}
+}
+
+String Utils::WIFI_MAC(const char* format) {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    return formatMacAddress(mac, format);
+}
+
+String Utils::BT_MAC(const char* format) {
+    uint8_t mac[6];
+    if (esp_read_mac(mac, ESP_MAC_BT) != ESP_OK) {
+        return String();
+    }
+    return formatMacAddress(mac, format);
+}
 
 unsigned long Utils::parseDuration(const String& input) {
     String s = input;
