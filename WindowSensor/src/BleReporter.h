@@ -5,7 +5,7 @@
 #include "Hardware.h"
 
 // Reports window state and battery as a short BTHome v2 advertisement burst.
-// Only the BLE controller is initialized (HCI over VHCI, no Bluedroid host: it would not fit the app partition); Wi-Fi is never touched.
+// BLE is shut down before Wi-Fi starts.
 class BleReporter {
 public:
     static constexpr uint32_t BURST_MS = 1000;
@@ -13,6 +13,9 @@ public:
     static constexpr uint16_t ADV_INTERVAL_MAX = 160; // 320; // 200 ms
 
     explicit BleReporter(Config& cfg);
+
+    // Scans passively and returns true when the portal request targets this device's BLE MAC.
+    bool scanForPortalRequest(uint32_t durationMs);
 
     // Returns true when the burst was sent completely. Returns false on a BLE error or when the
     // maintenance button hold interrupted the burst (check ButtonMonitor::maintenanceRequested()).
@@ -24,8 +27,7 @@ public:
 
 private:
     Config& _config;
-    bool _controllerInit = false;
-    bool _controllerEnabled = false;
+    bool _stackInitialized = false;
     bool _advertising = false;
 
     bool _start();

@@ -73,44 +73,48 @@ int Hardware::readDebouncedPin(int pin) {
     return lastValue;
 }
 
-float Hardware::readBattery(float rTop, float rBottom) {
+Hardware::BatteryReading Hardware::readBattery(float rTop, float rBottom, float correctionFactor) {
+    BatteryReading reading;
     analogReadResolution(12);
-    analogSetPinAttenuation(PIN_BAT_ADC, ADC_11db);
+    analogSetPinAttenuation(PIN_BAT_ADC, ADC_6db);
 
     esp_adc_cal_characterize(
         ADC_UNIT_1,
-        ADC_ATTEN_DB_12,
+        ADC_ATTEN_DB_6,
         ADC_WIDTH_BIT_12,
         1100,               // default Vref (used if no eFuse)
         &adc_chars
     );
 
     // discard first sample
-    analogRead(PIN_BAT_ADC);
+    reading.discardedRaw = analogRead(PIN_BAT_ADC);
     delayMicroseconds(200);
 
     uint32_t sum = 0;
-    for (int i = 0; i < BATTERY_SAMPLES; i++) {
-        sum += analogRead(PIN_BAT_ADC);
+    for (auto& sample : reading.samples) {
+        sample = analogRead(PIN_BAT_ADC);
+        sum += sample;
         delayMicroseconds(200);
     }
 
-    uint16_t raw = sum / BATTERY_SAMPLES;
+    reading.raw = sum / BATTERY_SAMPLES;
 
     // convert to millivolts using calibration
-    uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
-
-    //float adc_voltage = (raw / 4095.0) * 2.5;
+    reading.adcMillivolts = esp_adc_cal_raw_to_voltage(reading.raw, &adc_chars);
 
     if (rBottom <= 0.0) {
         DEBUG_PRINTLN("Warning: rBottom is zero or negative, defaulting to 1 kΩ");
         rBottom = 1.0;
+        reading.rBottomFallbackUsed = true;
     }
-    float ratio = (rTop + rBottom) / rBottom;
-    float battery_voltage = voltage_mv / 1000.0 * ratio;
+    reading.rTop = rTop;
+    reading.rBottom = rBottom;
+    reading.dividerRatio = (rTop + rBottom) / rBottom;
+    reading.correctionFactor = correctionFactor;
+    reading.batteryVoltage = (reading.adcMillivolts / 1000.0 * reading.dividerRatio) * reading.correctionFactor;
 
-    DEBUG_PRINTLN("Battery state: " + String(battery_voltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");
-    return battery_voltage;
+    DEBUG_PRINTLN("Battery state: " + String(reading.batteryVoltage) + " (rTop=" + String(rTop) + "kΩ, rBottom=" + String(rBottom) + "kΩ)");
+    return reading;
 }
 
 bool Hardware::bootButtonPressed() {

@@ -66,6 +66,18 @@ constexpr char InstalledVersion[] = "installed_version";
 constexpr char LatestVersion[] = "latest_version";
 constexpr char InProgress[] = "in_progress";
 constexpr char UpdatePercentage[] = "update_percentage";
+constexpr char Debug[] = "debug";
+constexpr char Battery[] = "battery";
+constexpr char Samples[] = "samples";
+constexpr char DiscardedRaw[] = "discarded_raw";
+constexpr char Raw[] = "raw";
+constexpr char AdcMillivolts[] = "adc_millivolts";
+constexpr char RTop[] = "r_top";
+constexpr char RBottom[] = "r_bottom";
+constexpr char RBottomFallbackUsed[] = "r_bottom_fallback_used";
+constexpr char DividerRatio[] = "divider_ratio";
+constexpr char CorrectionFactor[] = "correction_factor";
+constexpr char BatteryVoltage[] = "battery_voltage";
 }
 
 namespace Format {

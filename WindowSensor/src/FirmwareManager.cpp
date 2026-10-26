@@ -1,5 +1,6 @@
 #include "FirmwareManager.h"
 #include "FirmwareStrings.h"
+#include "Hardware.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
@@ -152,6 +153,21 @@ void FirmwareManager::_publishState(const String& version, int progress) {
     } else {
         payload[Strings::Json::UpdatePercentage] = nullptr;
     }
+    const auto batteryReading = Hardware::readBattery(_config.rTop, _config.rBottom, _config.batteryCorrectionFactor);
+    JsonObject battery = payload[Strings::Json::Debug][Strings::Json::Battery].to<JsonObject>();
+    JsonArray samples = battery[Strings::Json::Samples].to<JsonArray>();
+    for (const auto sample : batteryReading.samples) {
+        samples.add(sample);
+    }
+    battery[Strings::Json::DiscardedRaw] = batteryReading.discardedRaw;
+    battery[Strings::Json::Raw] = batteryReading.raw;
+    battery[Strings::Json::AdcMillivolts] = batteryReading.adcMillivolts;
+    battery[Strings::Json::RTop] = batteryReading.rTop;
+    battery[Strings::Json::RBottom] = batteryReading.rBottom;
+    battery[Strings::Json::RBottomFallbackUsed] = batteryReading.rBottomFallbackUsed;
+    battery[Strings::Json::DividerRatio] = batteryReading.dividerRatio;
+    battery[Strings::Json::CorrectionFactor] = batteryReading.correctionFactor;
+    battery[Strings::Json::BatteryVoltage] = batteryReading.batteryVoltage;
     String serialized;
     serializeJson(payload, serialized);
     _publish(_stateTopic, serialized);

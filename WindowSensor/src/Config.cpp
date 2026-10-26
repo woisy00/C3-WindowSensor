@@ -1,6 +1,8 @@
 #include "WindowSensorDefines.h"
 #include "Config.h"
 #include "Utils.h"
+#include <cmath>
+#include <cstdlib>
 
 Config::Config() : deviceName(""),
       mqttHost(""),
@@ -9,6 +11,8 @@ Config::Config() : deviceName(""),
       sleepTime(5UL * 60UL * 1000UL),  // 5 min default
       rTop(1000.0),
       rBottom(470.0),
+      batteryCorrectionFactor(1.052f),
+      blePortalScanEnabled(false),
       reedMode(ReedMode::SINGLE),
       singleOpenLevel(OpenLevel::Low),
       _p_dev(nullptr),
@@ -27,7 +31,12 @@ bool Config::load() {
             sleepTime = _prefs.getULong("sleep_time", sleepTime);
             rTop = _prefs.getFloat("rTop", rTop);
             rBottom = _prefs.getFloat("rBottom", rBottom);
+            batteryCorrectionFactor = _prefs.getFloat("bat_factor", 1.0f);
+            if (!std::isfinite(batteryCorrectionFactor) || batteryCorrectionFactor <= 0.0f) {
+                batteryCorrectionFactor = 1.0f;
+            }
             reedMode = ReedModeUtil::fromStored(_prefs.getULong("reed_mode", 0));
+            blePortalScanEnabled = _prefs.getBool("ble_portal_scan", false);
             singleOpenLevel = ReedModeUtil::openLevelFromStored(_prefs.getULong("single_open", 0));
         }
         _prefs.end();        
@@ -44,6 +53,8 @@ bool Config::load() {
     DEBUG_PRINTLN("  sleep_time: " + Utils::millisToHuman(sleepTime));
     DEBUG_PRINTLN("  rTop (kΩ): " + String(rTop));
     DEBUG_PRINTLN("  rBottom (kΩ): " + String(rBottom));
+    DEBUG_PRINTLN("  battery_correction_factor: " + String(batteryCorrectionFactor, 6));
+    DEBUG_PRINTLN("  ble_portal_scan: " + Utils::boolToString(blePortalScanEnabled));
 
     DEBUG_PRINTLN("  reed_mode: " + String(ReedModeUtil::toText(reedMode)));
     DEBUG_PRINTLN("  single_open: " + String(ReedModeUtil::toText(singleOpenLevel)));
@@ -64,13 +75,23 @@ void Config::save() {
             log_e("Invalid single-reed open level: use HIGH or LOW. Configuration was not saved.");
             return;
         }
+        const char* factorValue = _p_batteryCorrectionFactor->getValue();
+        char* factorEnd = nullptr;
+        const float requestedFactor = std::strtof(factorValue, &factorEnd);
+        if (factorEnd == factorValue || *factorEnd != '\0' ||
+            !std::isfinite(requestedFactor) || requestedFactor <= 0.0f) {
+            log_e("Invalid battery correction factor: use a positive number. Configuration was not saved.");
+            return;
+        }
         deviceName = _p_dev->getValue();
+        blePortalScanEnabled = String(_p_blePortalScan->getValue()) == "1";
         mqttHost = _p_host->getValue();
         mqttUser = _p_user->getValue();
         mqttPass = _p_pass->getValue();
         sleepTime = Utils::parseDuration(_p_sleep_time->getValue());
         rTop = String(_p_rTop->getValue()).toFloat();
         rBottom = String(_p_rBottom->getValue()).toFloat();
+        batteryCorrectionFactor = requestedFactor;
         reedMode = requestedMode;
         singleOpenLevel = requestedLevel;
     }
@@ -83,6 +104,8 @@ void Config::save() {
     _prefs.putULong("sleep_time", sleepTime);
     _prefs.putFloat("rTop", rTop);
     _prefs.putFloat("rBottom", rBottom);
+    _prefs.putFloat("bat_factor", batteryCorrectionFactor);
+    _prefs.putBool("ble_portal_scan", blePortalScanEnabled);
     _prefs.putULong("reed_mode", (unsigned long)reedMode);
     _prefs.putULong("single_open", (unsigned long)singleOpenLevel);
     _prefs.end();
@@ -100,6 +123,8 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_dev = new WiFiManagerParameter("dev", "Device Name", deviceName.c_str(), 32);
     _p_reed = new WiFiManagerParameter("reed_mode", "Reed wiring", ReedModeUtil::toText(reedMode), 16);
     _p_open_level = new WiFiManagerParameter("single_open", "Single reed: GPIO1 level when window OPEN", ReedModeUtil::toText(singleOpenLevel), 16);
+    _p_blePortalScan = new WiFiManagerParameter("ble_portal_scan", "Enable BLE portal request scan", blePortalScanEnabled ? "1" : "0", 1);
+    
     _p_host = new WiFiManagerParameter("mqtt", "MQTT Host", mqttHost.c_str(), 64);
     _p_user = new WiFiManagerParameter("user", "MQTT User", mqttUser.c_str(), 32);
     _p_pass = new WiFiManagerParameter("pass", "MQTT Pass", mqttPass.c_str(), 32);
@@ -107,6 +132,7 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     // use number inputs so only digits/decimal allowed
     _p_rTop = new WiFiManagerParameter("rTop", "Divider Rₜₒₚ (kΩ)", String(rTop).c_str(), 16, "min=0 step=0.1 type=number");
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
+    _p_batteryCorrectionFactor = new WiFiManagerParameter("bat_factor", "Battery correction factor", String(batteryCorrectionFactor, 6).c_str(), 16, "min=0.000001 step=any type=number");
 
     const char * menu[] = {"wifi","param","sep","info","update","exit","restart"};
     wm.setMenu(menu, sizeof(menu) / sizeof(menu[0]));
@@ -121,6 +147,13 @@ void Config::configureWiFiManager(WiFiManager& wm) {
         "</style>"
         "<script>"
         "document.addEventListener('DOMContentLoaded', function() {"
+        "    var portalScan = document.getElementById('ble_portal_scan');"
+        "    if (portalScan) {"
+        "        var scanEnabled = portalScan.value === '1';"
+        "        portalScan.type = 'checkbox';"
+        "        portalScan.value = '1';"
+        "        portalScan.checked = scanEnabled;"
+        "    }"
         "    var dropdowns = {"
         "        reed_mode: [['spdt', 'SPDT'], ['single', 'Single (GPIO1)']],"
         "        single_open: [['HIGH', 'HIGH'], ['LOW', 'LOW']]"
@@ -163,6 +196,7 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     wm.addParameter(_p_dev);
     wm.addParameter(_p_reed);
     wm.addParameter(_p_open_level);
+    wm.addParameter(_p_blePortalScan);
 
     wm.addParameter(_p_group_mqtt);
     wm.addParameter(_p_host);
@@ -173,6 +207,7 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     wm.addParameter(_p_sleep_time);
     wm.addParameter(_p_rTop);
     wm.addParameter(_p_rBottom);
+    wm.addParameter(_p_batteryCorrectionFactor);
     wm.addParameter(_p_adv_end);
 
     wm.setConfigPortalTimeout(0);

@@ -14,6 +14,8 @@ public:
     unsigned long sleepTime;
     float rTop;
     float rBottom;
+    float batteryCorrectionFactor;
+    bool blePortalScanEnabled;
     ReedMode reedMode;
     OpenLevel singleOpenLevel;
 
@@ -35,6 +37,8 @@ private:
     WiFiManagerParameter* _p_sleep_time;
     WiFiManagerParameter* _p_rTop;
     WiFiManagerParameter* _p_rBottom;
+    WiFiManagerParameter* _p_batteryCorrectionFactor;
+    WiFiManagerParameter* _p_blePortalScan;
     WiFiManagerParameter* _p_reed;
     WiFiManagerParameter* _p_open_level;
 

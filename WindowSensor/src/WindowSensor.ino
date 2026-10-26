@@ -49,6 +49,11 @@ void setup() {
     DEBUG_PRINTLN("  config: " + Utils::boolToString(configExists));
     DEBUG_PRINTLN("  button: " + Utils::boolToString(maintenanceRequested));
 
+    if (configExists && !maintenanceRequested && config.blePortalScanEnabled) {
+        maintenanceRequested = bleReporter.scanForPortalRequest(100);
+        if (maintenanceRequested) DEBUG_PRINTLN("Remote BLE maintenance request received");
+    }
+
     if (maintenanceRequested || !configExists) {
         runMaintenance(configExists);
     }
@@ -58,8 +63,8 @@ void loop() {
     Hardware::WindowState windowState;
 
     windowState = Hardware::readWindowState(config.reedMode, config.singleOpenLevel);
-    float batteryVoltage = Hardware::readBattery(config.rTop, config.rBottom);
-    if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryVoltage)) {
+    const auto batteryReading = Hardware::readBattery(config.rTop, config.rBottom, config.batteryCorrectionFactor);
+    if (!ButtonMonitor::maintenanceRequested() && !bleReporter.report(windowState, batteryReading.batteryVoltage)) {
         DEBUG_PRINTLN("BLE report failed or interrupted");
     }
 

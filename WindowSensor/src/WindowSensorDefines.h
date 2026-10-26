@@ -1,6 +1,6 @@
 // #define VERSION "v1.0.199"
 
-#define DEBUG
+//#define DEBUG
 // #define DEBUG_REMOTE
 
 #if defined(DEBUG)
@@ -13,6 +13,7 @@
     #define DEBUG_PRINTLN(x)
 #endif
 
+#define WAKEUP_SERVICE_UUID "85bf7c7e-a5db-443b-b691-51080f4fb285"
 
 #define HW_MODEL "BWS-01"
 #define HW_MANUFACTURER "bergermeier"

@@ -14,7 +14,7 @@ WiFiConnector::WiFiConnector(Config& cfg)
 
 void WiFiConnector::saveConfigCallback() {
     if (_instance) {
-        _instance->_config.markSave();
+        _instance->_config.save();
     }
 }
 void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec, FirmwareManager* firmwareManager) {
