@@ -11,6 +11,7 @@ public:
     void begin();
     void maintenancePortalStarted();
     void service();
+    bool publishBatteryDebug();
 
 private:
     Config& _config;
@@ -31,7 +32,7 @@ private:
     bool _connect();
     bool _publish(const String& topic, const String& payload);
     void _publishDiscovery(const String& version);
-    void _publishState(const String& version, int progress = -1);
+    bool _publishState(const String& version, int progress = -1, bool debugBattery = false);
     void _performUpdate(const String& firmwareUrl);
     static void _messageCallback(char* topic, uint8_t* payload, unsigned int length);
     static FirmwareManager* _instance;

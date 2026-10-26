@@ -134,7 +134,7 @@ void Config::configureWiFiManager(WiFiManager& wm) {
     _p_rBottom = new WiFiManagerParameter("rBottom", "Divider R₆ₒₜₜₒₘ (kΩ)", String(rBottom).c_str(), 16, "min=0 step=0.1 type=number");
     _p_batteryCorrectionFactor = new WiFiManagerParameter("bat_factor", "Battery correction factor", String(batteryCorrectionFactor, 6).c_str(), 16, "min=0.000001 step=any type=number");
 
-    const char * menu[] = {"wifi","param","sep","info","update","exit","restart"};
+    const char * menu[] = {"wifi","param","sep","info","update","custom","exit","restart"};
     wm.setMenu(menu, sizeof(menu) / sizeof(menu[0]));
     wm.setDarkMode(true);
 

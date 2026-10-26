@@ -52,6 +52,16 @@ void FirmwareManager::service() {
     _mqtt.loop();
 }
 
+bool FirmwareManager::publishBatteryDebug() {
+    if (WiFi.status() != WL_CONNECTED || _config.mqttHost.isEmpty()) {
+        return false;
+    }
+    if (!_mqtt.connected() && !_connect()) {
+        return false;
+    }
+    return _publishState(VERSION, _updateInProgress ? _updateProgress : -1, true);
+}
+
 bool FirmwareManager::_connect() {
     const unsigned long now = millis();
     if (now - _lastConnectAttemptMs < 5000UL) {
@@ -137,14 +147,15 @@ void FirmwareManager::_publishDiscovery(const String& version) {
     JsonArray bluetoothConnection = connections.add<JsonArray>();
     bluetoothConnection.add(Strings::Mqtt::BluetoothConnection);
     bluetoothConnection.add(Utils::BT_MAC(Strings::Format::MacAddress));
-    device[Strings::Json::SoftwareVersion] = version.isEmpty() ? VERSION : version;
+    device[Strings::Json::SoftwareVersion] = (version.isEmpty() ? String(VERSION) : version) +
+        " (Build: " __DATE__ " " __TIME__ ")";
 
     String serialized;
     serializeJson(payload, serialized);
     _publish(_discoveryTopic, serialized);
 }
 
-void FirmwareManager::_publishState(const String& version, int progress) {
+bool FirmwareManager::_publishState(const String& version, int progress, bool debugBattery) {
     JsonDocument payload;
     payload[Strings::Json::InstalledVersion] = version;
     payload[Strings::Json::InProgress] = _updateInProgress;
@@ -153,24 +164,26 @@ void FirmwareManager::_publishState(const String& version, int progress) {
     } else {
         payload[Strings::Json::UpdatePercentage] = nullptr;
     }
-    const auto batteryReading = Hardware::readBattery(_config.rTop, _config.rBottom, _config.batteryCorrectionFactor);
-    JsonObject battery = payload[Strings::Json::Debug][Strings::Json::Battery].to<JsonObject>();
-    JsonArray samples = battery[Strings::Json::Samples].to<JsonArray>();
-    for (const auto sample : batteryReading.samples) {
-        samples.add(sample);
+    if (debugBattery) {
+        const auto batteryReading = Hardware::readBattery(_config.rTop, _config.rBottom, _config.batteryCorrectionFactor);
+        JsonObject battery = payload[Strings::Json::Debug][Strings::Json::Battery].to<JsonObject>();
+        JsonArray samples = battery[Strings::Json::Samples].to<JsonArray>();
+        for (const auto sample : batteryReading.samples) {
+            samples.add(sample);
+        }
+        battery[Strings::Json::DiscardedRaw] = batteryReading.discardedRaw;
+        battery[Strings::Json::Raw] = batteryReading.raw;
+        battery[Strings::Json::AdcMillivolts] = batteryReading.adcMillivolts;
+        battery[Strings::Json::RTop] = batteryReading.rTop;
+        battery[Strings::Json::RBottom] = batteryReading.rBottom;
+        battery[Strings::Json::RBottomFallbackUsed] = batteryReading.rBottomFallbackUsed;
+        battery[Strings::Json::DividerRatio] = batteryReading.dividerRatio;
+        battery[Strings::Json::CorrectionFactor] = batteryReading.correctionFactor;
+        battery[Strings::Json::BatteryVoltage] = batteryReading.batteryVoltage;
     }
-    battery[Strings::Json::DiscardedRaw] = batteryReading.discardedRaw;
-    battery[Strings::Json::Raw] = batteryReading.raw;
-    battery[Strings::Json::AdcMillivolts] = batteryReading.adcMillivolts;
-    battery[Strings::Json::RTop] = batteryReading.rTop;
-    battery[Strings::Json::RBottom] = batteryReading.rBottom;
-    battery[Strings::Json::RBottomFallbackUsed] = batteryReading.rBottomFallbackUsed;
-    battery[Strings::Json::DividerRatio] = batteryReading.dividerRatio;
-    battery[Strings::Json::CorrectionFactor] = batteryReading.correctionFactor;
-    battery[Strings::Json::BatteryVoltage] = batteryReading.batteryVoltage;
     String serialized;
     serializeJson(payload, serialized);
-    _publish(_stateTopic, serialized);
+    return _publish(_stateTopic, serialized);
 }
 
 void FirmwareManager::_performUpdate(const String& firmwareUrl) {

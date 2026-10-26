@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include "WindowSensorDefines.h"
+#include "version.h"
 
 WiFiConnector* WiFiConnector::_instance = nullptr;
 
@@ -22,6 +23,30 @@ void WiFiConnector::connect(bool forceConfig, uint32_t portalTimeoutSec, Firmwar
         _wmPtr = new WiFiManager();
     }
     WiFiManager& _wm = *_wmPtr;
+    String portalMenu = "<p>Firmware: <strong>" VERSION "</strong><br>Build: " __DATE__ " " __TIME__ "</p>";
+    if (firmwareManager != nullptr) {
+        portalMenu +=
+            "<form action='/battery-debug' method='post' onsubmit=\""
+            "event.preventDefault();"
+            "var button=this.querySelector('button');"
+            "var status=document.getElementById('battery-debug-status');"
+            "button.disabled=true;status.textContent='Sending...';"
+            "fetch(this.action,{method:'POST'}).then(function(response){"
+            "return response.text();"
+            "}).then(function(message){status.textContent=message;"
+            "}).catch(function(){status.textContent='Request failed';"
+            "}).finally(function(){button.disabled=false;});\">"
+            "<button type='submit'>Send Battery Debug</button>"
+            "<p id='battery-debug-status' role='status'></p></form>";
+        _wm.setWebServerCallback([this, firmwareManager]() {
+            _wmPtr->server->on("/battery-debug", HTTP_POST, [this, firmwareManager]() {
+                const bool sent = firmwareManager->publishBatteryDebug();
+                _wmPtr->server->send(sent ? 200 : 503, "text/plain",
+                    sent ? "Battery debug sent via MQTT" : "MQTT publish failed; check connection and retry");
+            });
+        });
+    }
+    _wm.setCustomMenuHTML(portalMenu.c_str());
     // set hostname early so MDNS and WiFiManager see it
     WiFi.hostname(_config.deviceName);
     _wm.setHostname(_config.deviceName);
