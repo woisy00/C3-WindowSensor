@@ -50,7 +50,26 @@
   <div class="page-head"><div><div class="eyebrow">Configuration</div><h1>Device</h1></div></div>
   <form id="device-form"><div class="section"><h2>General</h2><div class="form-grid"><div class="field"><label for="deviceName">Device name</label><input id="deviceName" name="deviceName" required maxlength="32" pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*" autocomplete="off"></div><div class="field"><label for="sleepSeconds">Sleep interval (seconds)</label><input id="sleepSeconds" name="sleepSeconds" type="number" required min="0" max="4294967" step="1"></div></div></div>
   <div class="section"><h2>Window contact</h2><div class="form-grid"><div class="field"><label for="reedMode">Reed wiring</label><select id="reedMode" name="reedMode"><option value="single">Single contact / GPIO1</option><option value="spdt">SPDT / GPIO1 + GPIO2</option></select></div><div class="field" id="open-level-field"><label for="singleOpenLevel">GPIO1 when window is open</label><select id="singleOpenLevel" name="singleOpenLevel"><option value="LOW">LOW</option><option value="HIGH">HIGH</option></select></div><div class="switch-row field full"><label for="blePortalScanEnabled">BLE maintenance request scan</label><input id="blePortalScanEnabled" name="blePortalScanEnabled" type="checkbox" class="switch"></div></div></div>
-  <details><summary>Battery calibration</summary><div class="form-grid"><div class="field"><label for="rTop">Top resistor (kOhm)</label><input id="rTop" name="rTop" type="number" required min="0" max="1000000" step="any"></div><div class="field"><label for="rBottom">Bottom resistor (kOhm)</label><input id="rBottom" name="rBottom" type="number" required min="0.000001" max="1000000" step="any"></div><div class="field"><label for="batteryCorrectionFactor">Correction factor</label><input id="batteryCorrectionFactor" name="batteryCorrectionFactor" type="number" required min="0.000001" max="100" step="any"></div></div></details>
+  <details id="battery-calibration"><summary>Battery calibration</summary>
+    <div class="form-grid">
+      <div class="field"><label for="rTop">Top resistor (kOhm)</label><input id="rTop" name="rTop" type="number" required min="0" max="1000000" step="any"></div>
+      <div class="field"><label for="rBottom">Bottom resistor (kOhm)</label><input id="rBottom" name="rBottom" type="number" required min="0.000001" max="1000000" step="any"></div>
+      <div class="field"><label for="batteryCorrectionFactor">Correction factor</label><input id="batteryCorrectionFactor" name="batteryCorrectionFactor" type="number" required min="0.000001" max="100" step="any"></div>
+      <div class="field"><label for="measuredVoltage">Measured battery voltage (V)</label><div class="inline"><input id="measuredVoltage" type="number" min="0.000001" max="100" step="any" placeholder="3.10" inputmode="decimal"><button type="button" class="btn" id="battery-calibrate">Calibrate</button></div></div>
+      <div class="field full"><div class="fact"><span class="muted">Voltage with entered settings</span><output id="calibration-estimate" class="mono">--</output></div><p id="calibration-result" role="status" class="muted"></p></div>
+    </div>
+    <div class="section-title"><h3>Battery diagnostics</h3><small id="battery-debug-updated">--</small></div>
+    <dl class="facts">
+      <div class="fact"><dt>ADC samples (raw)</dt><dd id="battery-samples" class="mono">--</dd></div>
+      <div class="fact"><dt>Discarded / averaged raw</dt><dd id="battery-raw" class="mono">--</dd></div>
+      <div class="fact"><dt>ADC pin voltage</dt><dd id="battery-adc" class="mono">--</dd></div>
+      <div class="fact"><dt>Applied divider (top / bottom)</dt><dd id="battery-divider" class="mono">--</dd></div>
+      <div class="fact"><dt>Divider ratio</dt><dd id="battery-ratio" class="mono">--</dd></div>
+      <div class="fact"><dt>Uncorrected battery voltage</dt><dd id="battery-uncorrected" class="mono">--</dd></div>
+      <div class="fact"><dt>Applied correction factor</dt><dd id="battery-applied-factor" class="mono">--</dd></div>
+      <div class="fact"><dt>Corrected battery voltage</dt><dd id="battery-corrected" class="mono">--</dd></div>
+    </dl>
+  </details>
   <details><summary>Maintenance access</summary><div class="form-grid"><div class="field full"><label for="portalPassword">New maintenance password</label><input id="portalPassword" name="portalPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="Unchanged"><small>Portal login: admin. Applies after restart.</small></div></div></details>
   <div class="actions"><small>Restart to apply all changes.</small><button class="btn primary" type="submit">Save device</button></div></form>
 </section>
@@ -81,6 +100,52 @@ const byId = id => document.getElementById(id);
 let token = '', toastTimer, polling = false, logAfter = 0, logLines = [];
 const mockConfig = {deviceName:'living-room-window',mqttHost:'homeassistant.local',mqttUser:'window-sensor',sleepSeconds:300,rTop:1000,rBottom:470,batteryCorrectionFactor:1.052,blePortalScanEnabled:false,reedMode:'single',singleOpenLevel:'LOW',ssid:'Home Network',staticEnabled:false,staticIp:'',gateway:'',subnet:'',dns:''};
 const mockStatus = {deviceName:'living-room-window',version:'Preview',build:'Local preview',windowOpen:false,windowValid:true,battery:3.08,ssid:'Home Network',rssi:-58,ip:'192.168.1.84',mac:'A4:C1:38:28:6F:02',mqttHost:'homeassistant.local',heap:138240,remaining:582,sleepSeconds:300,reedMode:'single',singleOpenLevel:'LOW',ap:false,logEnabled:false};
+mockStatus.batteryDebug={samples:[1179,1181,1180],discardedRaw:1168,raw:1180,adcMillivolts:936,rTop:1000,rBottom:470,rBottomFallbackUsed:false,dividerRatio:1470/470,correctionFactor:1.052,uncorrectedVoltage:0.936*1470/470,batteryVoltage:0.936*1470/470*1.052};
+let latestBatteryReading=null;
+function enteredBatteryVoltage(reading){
+  const top=Number(byId('rTop').value),bottom=Number(byId('rBottom').value);
+  if(!reading||!byId('rTop').checkValidity()||!byId('rBottom').checkValidity()||!Number.isFinite(reading.adcMillivolts)||reading.adcMillivolts<=0||!Number.isFinite(top)||top<0||!Number.isFinite(bottom)||bottom<=0)return NaN;
+  return reading.adcMillivolts/1000*((top+bottom)/bottom);
+}
+function updateCalibrationEstimate(){
+  const factor=Number(byId('batteryCorrectionFactor').value),voltage=enteredBatteryVoltage(latestBatteryReading)*factor;
+  byId('calibration-estimate').textContent=byId('batteryCorrectionFactor').checkValidity()&&Number.isFinite(voltage)&&voltage>0?voltage.toFixed(3)+' V':'--';
+}
+function renderBatteryDebug(reading){
+  if(!reading)return;
+  latestBatteryReading=reading;
+  byId('battery-samples').textContent=reading.samples.join(', ');
+  byId('battery-raw').textContent=reading.discardedRaw+' / '+reading.raw;
+  byId('battery-adc').textContent=reading.adcMillivolts+' mV';
+  byId('battery-divider').textContent=reading.rTop+' / '+reading.rBottom+' kOhm'+(reading.rBottomFallbackUsed?' (fallback)':'');
+  byId('battery-ratio').textContent=Number(reading.dividerRatio).toFixed(6);
+  byId('battery-uncorrected').textContent=Number(reading.uncorrectedVoltage).toFixed(3)+' V';
+  byId('battery-applied-factor').textContent=Number(reading.correctionFactor).toFixed(6);
+  byId('battery-corrected').textContent=Number(reading.batteryVoltage).toFixed(3)+' V';
+  byId('battery-debug-updated').textContent='Updated '+new Date().toLocaleTimeString();
+  updateCalibrationEstimate();
+}
+for(const id of ['rTop','rBottom','batteryCorrectionFactor'])byId(id).addEventListener('input',()=>{updateCalibrationEstimate();byId('calibration-result').textContent='';});
+byId('measuredVoltage').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();byId('battery-calibrate').click();}});
+byId('battery-calibrate').addEventListener('click',async event=>{
+  const button=event.currentTarget,measured=byId('measuredVoltage');
+  byId('calibration-result').textContent='';
+  if(!measured.value||!measured.checkValidity()||Number(measured.value)<=0){toast('Enter a positive measured battery voltage.',true);measured.focus();return;}
+  for(const id of ['rTop','rBottom'])if(!byId(id).reportValidity())return;
+  button.disabled=true;
+  try{
+    const status=await api('/api/status'),reading=status.batteryDebug;
+    const uncorrected=enteredBatteryVoltage(reading);
+    if(!reading||!Number.isFinite(uncorrected)||uncorrected<=0)throw new Error('No valid battery reading is available. Check the ADC and resistor values.');
+    if(!Number.isFinite(reading.raw)||reading.raw<=0||reading.raw>=4095||!Array.isArray(reading.samples)||reading.samples.some(sample=>sample>=4095))throw new Error('The ADC reading is zero or clipped. Check the battery divider before calibrating.');
+    const voltage=Number(measured.value);
+    const factor=voltage/uncorrected;
+    if(!measured.value||!measured.checkValidity()||!Number.isFinite(factor)||factor<0.000001||factor>100)throw new Error('Calibration is outside the supported range. Check the measured voltage and resistor values.');
+    byId('batteryCorrectionFactor').value=factor.toFixed(6);
+    renderBatteryDebug(reading);
+    byId('calibration-result').textContent='Calculated factor: '+factor.toFixed(6)+' (not saved)';
+  }catch(error){toast(error.message,true);}finally{button.disabled=false;}
+});
 function toast(message,error=false){clearTimeout(toastTimer);byId('toast').textContent=message;byId('toast').dataset.error=String(error);toastTimer=setTimeout(()=>byId('toast').textContent='',6000);}
 async function api(path,body){if(preview){if(path==='/api/config'&&body)Object.assign(mockConfig,body);if(path==='/api/logs'&&body)mockStatus.logEnabled=body.enabled;if(path==='/api/config')return {...mockConfig};if(path==='/api/status')return {...mockStatus,...mockConfig};if(path==='/api/scan')return {networks:[{ssid:'Home Network',rssi:-58,open:false},{ssid:'Guest Network',rssi:-72,open:false},{ssid:'Workshop',rssi:-81,open:true}]};if(path.startsWith('/api/logs'))return {lines:[{id:1,text:'[00:00] Maintenance portal started'},{id:2,text:'[00:01] Wi-Fi connected: 192.168.1.84'},{id:3,text:'[00:02] Battery reading: 3.08 V'}].filter(line=>line.id>logAfter)};return {message:'Preview only. No device was changed.'};}const response=await fetch(path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json','X-Portal-Token':token}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(12000)});const result=await response.json();if(!response.ok)throw new Error(result.message||'Request failed');return result;}
 function showTab(name){document.querySelectorAll('[data-tab]').forEach(button=>{const selected=button.dataset.tab===name;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});document.querySelectorAll('.panel').forEach(panel=>panel.hidden=panel.id!==name);}
@@ -92,7 +157,7 @@ byId('reedMode').addEventListener('change',updateReed);byId('staticEnabled').add
 byId('wifiOpen').addEventListener('change',()=>{byId('wifiPassword').disabled=byId('wifiOpen').checked;});
 function renderStatus(status){byId('device-title').textContent=status.deviceName;byId('hostname').textContent=status.deviceName+'.local';byId('device-address').textContent='BWS-01 / '+(status.ap?'Setup access point':status.ip);byId('window-state').textContent=!status.windowValid?'Contact fault':status.windowOpen?'Open':'Closed';byId('state-dot').style.background=!status.windowValid?'var(--red)':status.windowOpen?'var(--amber)':'var(--green)';byId('window-leaf').setAttribute('d',status.windowOpen?'M83 22l39 9v114l-39 9z':'M83 22h42v132H83z');byId('reed-caption').textContent=status.reedMode==='single'?'Single contact / GPIO1 / open = '+status.singleOpenLevel:'SPDT contact / GPIO1 + GPIO2';byId('battery').textContent=Number(status.battery).toFixed(2)+' V';byId('battery-bar').style.width=Math.max(0,Math.min(100,(status.battery-2)/1.2*100))+'%';byId('wifi-name').textContent=status.ssid||'Not connected';byId('wifi-signal').textContent=status.ap?'Access point':status.rssi+' dBm';byId('ip').textContent=status.ip;byId('mqtt-status').textContent=status.mqttHost||'Not configured';byId('version').textContent=status.version;byId('sidebar-version').textContent=status.version;byId('installed-version').textContent=status.version+' / '+status.build;byId('mac').textContent=status.mac;byId('heap').textContent=Math.round(status.heap/1024)+' KB';byId('sleep-status').textContent=status.sleepSeconds+' s';const remaining=status.remaining<0?'No timeout':Math.floor(status.remaining/60)+'m '+String(status.remaining%60).padStart(2,'0')+'s';byId('remaining').textContent=remaining;byId('timeout-label').textContent=status.remaining<0?'First-time setup':'Ends in '+remaining;byId('connection').className='badge'+(preview?' preview':'');byId('connection').textContent=preview?'Offline preview':status.ap?'Setup access point':'Connected';byId('updated').textContent='Updated '+new Date().toLocaleTimeString();byId('log-enabled').checked=status.logEnabled;}
 function formValues(form){const result={};for(const field of form.elements){if(!field.name||field.type==='submit'||field.disabled)continue;result[field.name]=field.type==='checkbox'?field.checked:field.type==='number'?Number(field.value):field.value;}return result;}
-for(const name of ['network','device'])byId(name+'-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button[type=submit]');button.disabled=true;try{const result=await api('/api/config',{...formValues(event.target),section:name});toast(preview?'Preview only. Settings are not written to a device.':result.message);event.target.querySelectorAll('input[type=password]').forEach(field=>field.value='');if(name==='network'){byId('clearMqttPass').checked=false;}}catch(error){toast(error.message,true);}finally{button.disabled=false;}});
+for(const name of ['network','device'])byId(name+'-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button[type=submit]');button.disabled=true;try{const result=await api('/api/config',{...formValues(event.target),section:name});toast(preview?'Preview only. Settings are not written to a device.':result.message);event.target.querySelectorAll('input[type=password]').forEach(field=>field.value='');if(name==='device'&&byId('calibration-result').textContent)byId('calibration-result').textContent=preview?'Preview only. Calibration is not stored.':'Calibration settings saved.';if(name==='network'){byId('clearMqttPass').checked=false;}}catch(error){toast(error.message,true);}finally{button.disabled=false;}});
 byId('scan').addEventListener('click',async()=>{const button=byId('scan');button.disabled=true;button.textContent='Scanning...';try{const result=await api('/api/scan');const select=byId('networks');select.replaceChildren(new Option('Select a network',''));result.networks.forEach(network=>{if(!network.ssid)return;const option=new Option(network.ssid+' / '+network.rssi+' dBm'+(network.open?' / Open':''),network.ssid);option.dataset.open=String(network.open);select.add(option);});select.hidden=false;if(!result.networks.length)toast('No networks found.');}catch(error){toast(error.message,true);}finally{button.disabled=false;button.textContent='Scan networks';}});
 byId('networks').addEventListener('change',event=>{if(!event.target.value)return;byId('ssid').value=event.target.value;byId('wifiOpen').checked=event.target.selectedOptions[0].dataset.open==='true';byId('wifiPassword').disabled=byId('wifiOpen').checked;});
 async function command(path,button){button.disabled=true;try{const result=await api(path,{});toast(result.message);}catch(error){toast(error.message,true);}finally{button.disabled=false;}}
@@ -108,7 +173,7 @@ byId('factory-reset-form').addEventListener('submit',async event=>{event.prevent
 byId('log-enabled').addEventListener('change',async event=>{try{await api('/api/logs',{enabled:event.target.checked});if(!event.target.checked&&!logLines.length)byId('logs').textContent='Log capture is off.';}catch(error){event.target.checked=!event.target.checked;toast(error.message,true);}});
 byId('download-logs').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([logLines.join('\n')],{type:'text/plain'}));const anchor=document.createElement('a');anchor.href=url;anchor.download='window-sensor-session.log';anchor.click();URL.revokeObjectURL(url);});
 byId('update-form').addEventListener('submit',event=>{event.preventDefault();if(preview){toast('Preview only. Firmware uploads are disabled.');return;}const file=byId('firmware').files[0];if(!file||!file.name.toLowerCase().endsWith('.bin')){toast('Select an ESP32-C3 firmware .bin file.',true);return;}if(!confirm('Upload '+file.name+' and restart the sensor?'))return;const button=event.target.querySelector('button');const progress=byId('upload-progress');button.disabled=true;progress.hidden=false;progress.value=0;const request=new XMLHttpRequest();request.open('POST','/api/update');request.setRequestHeader('X-Portal-Token',token);request.timeout=180000;request.upload.onprogress=event=>{if(event.lengthComputable)progress.value=event.loaded/event.total*100;};request.onload=()=>{try{const result=JSON.parse(request.responseText);toast(result.message,request.status!==200);}catch{toast('Unexpected update response.',true);}button.disabled=false;};request.onerror=request.ontimeout=()=>{toast('Upload interrupted. Check the device before retrying.',true);button.disabled=false;};const data=new FormData();data.append('firmware',file);request.send(data);});
-async function poll(){if(polling||document.hidden)return;polling=true;try{renderStatus(await api('/api/status'));if(byId('log-enabled').checked){const result=await api('/api/logs?after='+logAfter);for(const line of result.lines){logLines.push(line.text);logAfter=line.id;}logLines=logLines.slice(-120);byId('logs').textContent=logLines.join('\n')||'Waiting for session messages...';byId('logs').scrollTop=byId('logs').scrollHeight;}}catch{byId('connection').textContent='Device unavailable';byId('connection').className='badge connection-lost';}finally{polling=false;}}
+async function poll(){if(polling||document.hidden)return;polling=true;try{const status=await api('/api/status');renderStatus(status);renderBatteryDebug(status.batteryDebug);if(byId('log-enabled').checked){const result=await api('/api/logs?after='+logAfter);for(const line of result.lines){logLines.push(line.text);logAfter=line.id;}logLines=logLines.slice(-120);byId('logs').textContent=logLines.join('\n')||'Waiting for session messages...';byId('logs').scrollTop=byId('logs').scrollHeight;}}catch{byId('connection').textContent='Device unavailable';byId('connection').className='badge connection-lost';}finally{polling=false;}}
 async function init(){try{if(!preview){const session=await api('/api/session');token=session.token;}populate(await api('/api/config'));await poll();setInterval(poll,2500);}catch(error){toast('Could not load configuration: '+error.message,true);byId('connection').textContent='Device unavailable';}}
 init();
 </script>
