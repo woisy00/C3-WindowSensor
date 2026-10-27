@@ -7,8 +7,12 @@
 class ButtonHold {
 public:
     static constexpr uint32_t HOLD_MS = 3000;
+    static constexpr uint32_t FACTORY_RESET_MS = 20000;
     static constexpr uint32_t RELEASE_DEBOUNCE_MS = 30;
 
+#if __cplusplus >= 201402L
+    constexpr
+#endif
     void update(bool pressed, uint32_t nowMs) {
         if (pressed) {
             if (!_pressed) {
@@ -17,6 +21,7 @@ public:
             }
             _releasing = false;
             if (!_fired && (uint32_t)(nowMs - _start) >= HOLD_MS) _fired = true;
+            if ((uint32_t)(nowMs - _start) >= FACTORY_RESET_MS) _factoryResetFired = true;
         } else if (_pressed) {
             if (!_releasing) {
                 _releasing = true;
@@ -29,15 +34,17 @@ public:
     }
 
     // hold reached HOLD_MS (latched until reset())
-    bool fired() const { return _fired; }
+    constexpr bool fired() const { return _fired; }
+    constexpr bool factoryResetFired() const { return _factoryResetFired; }
     // a hold is in progress and has not yet been decided
-    bool pending() const { return _pressed && !_fired; }
+    constexpr bool pending() const { return _pressed && !_fired; }
     void reset() { *this = ButtonHold(); }
 
 private:
     bool _pressed = false;
     bool _releasing = false;
     bool _fired = false;
+    bool _factoryResetFired = false;
     uint32_t _start = 0;
     uint32_t _releaseStart = 0;
 };

@@ -45,6 +45,13 @@ void setup() {
     // A button that is down at start (button wake, reset or boot) must be held 3 s continuously for
     // maintenance. A shorter press is released here and the normal report cycle continues.
     bool maintenanceRequested = ButtonMonitor::settle();
+    if (config.portalRequested) {
+        maintenanceRequested = true;
+        if (!config.setPortalRequested(false)) {
+            log_e("Could not clear the saved portal request; it may be repeated after reboot.");
+        }
+        DEBUG_PRINTLN("Portal requested by previous session");
+    }
     DEBUG_PRINTLN("Maintenance requested");
     DEBUG_PRINTLN("  config: " + Utils::boolToString(configExists));
     DEBUG_PRINTLN("  button: " + Utils::boolToString(maintenanceRequested));

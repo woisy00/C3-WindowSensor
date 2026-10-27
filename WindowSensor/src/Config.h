@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Preferences.h>
-#include <WiFiManager.h>
 #include <Arduino.h>
 #include "ReedMode.h"
 
@@ -18,36 +17,23 @@ public:
     bool blePortalScanEnabled;
     ReedMode reedMode;
     OpenLevel singleOpenLevel;
+    String wifiSsid;
+    String wifiPassword;
+    bool wifiConfigured = false;
+    bool staticEnabled = false;
+    String staticIp;
+    String gateway;
+    String subnet;
+    String dns;
+    String portalPassword = "window-sensor";
+    bool portalRequested = false;
 
     Config();
 
     bool load();
-    void save();
-    void configureWiFiManager(WiFiManager& wm);
-    bool shouldSave() const { return _shouldSave; }
-    void markSave() { _shouldSave = true; }
+    bool save();
+    bool setPortalRequested(bool requested);
 
 private:
     Preferences _prefs;
-    // visible input parameters
-    WiFiManagerParameter* _p_dev;
-    WiFiManagerParameter* _p_host;
-    WiFiManagerParameter* _p_user;
-    WiFiManagerParameter* _p_pass;
-    WiFiManagerParameter* _p_sleep_time;
-    WiFiManagerParameter* _p_rTop;
-    WiFiManagerParameter* _p_rBottom;
-    WiFiManagerParameter* _p_batteryCorrectionFactor;
-    WiFiManagerParameter* _p_blePortalScan;
-    WiFiManagerParameter* _p_reed;
-    WiFiManagerParameter* _p_open_level;
-
-    // grouping headers (custom HTML only)
-    WiFiManagerParameter* _p_group_general;
-    WiFiManagerParameter* _p_group_mqtt;
-    // advanced section uses collapsible details tag
-    WiFiManagerParameter* _p_adv_begin;
-    WiFiManagerParameter* _p_adv_end;
-
-    bool _shouldSave;
 };
